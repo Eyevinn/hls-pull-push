@@ -1,0 +1,11 @@
+{
+  "name": "@eyevinn/hls-pull-push",
+  "version": "0.1.0",
+  "description": "NPM library to pull HLS Live and Push to a WebDAV destination",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Eyevinn Technology <work@eyevinn.se>",
+  "license": "MIT"
+}
