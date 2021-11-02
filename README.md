@@ -9,15 +9,36 @@ npm install --save @eyevinn/hls-pull-push
 ## Usage
 
 ```
-const HLSPullPush = require("@eyevinn/hls-pull-push");
+const { HLSPullPush, WebDAV } = require("@eyevinn/hls-pull-push");
 
-const pullAndPush = new HLSPullPush("https://example.com/live/master.m3u8", {
+const destPlugin = new WebDAV({
   destination: "webdav://destination",
   username: USERNAME,
   password: PASSWORD
 });
+const pullPushService = new HLSPullPush({
+  dest: destPlugin
+});
+pullPushService.listen(process.env.PORT || 8080);
+```
 
-pullAndPush.start();
+## API
+
+| ENDPOINT                      | METHOD | DESCRIPTION                                 |
+| ----------------------------- | ------ | ------------------------------------------- |
+| `/api/docs`                   | GET    | Live API documentation                      |
+| `/api/v1/fetcher`             | POST   | Create a fetcher and start to pull and push |
+| `/api/v1/fetcher`             | GET    | List of active fetchers                     |
+| `/api/v1/fetcher/{fetcherId}` | DELETE | Stop an active fetcher                      |
+
+### POST JSON Template
+
+```
+{
+  "name": <string>,  // Name of session
+  "url": <string>,   // Reachable HTTP url to HLS live stream
+  "dest": IDestPayload,  // Destination plugin specific destination payload
+}
 ```
 
 # License (MIT)

@@ -1,11 +1,20 @@
 {
   "name": "@eyevinn/hls-pull-push",
   "version": "0.1.0",
-  "description": "NPM library to pull HLS Live and Push to a WebDAV destination",
-  "main": "index.js",
+  "description": "NPM library to pull HLS Live and Push to a another origin",
+  "main": "dist/index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "build": "tsc --project ./",
+    "postversion": "git push && git push --tags",
+    "test": "echo \"WARN: no test specified\" && exit 0"
   },
   "author": "Eyevinn Technology <work@eyevinn.se>",
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^16.11.6",
+    "typescript": "^4.4.4"
+  },
+  "dependencies": {
+    "@eyevinn/hls-recorder": "^0.2.0"
+  }
 }
