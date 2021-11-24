@@ -17,18 +17,20 @@
   },
   "dependencies": {
     "@aws-sdk/client-mediapackage": "^3.41.0",
-    "@eyevinn/hls-recorder": "^0.3.0",
+    "@eyevinn/hls-recorder": "^0.3.2",
     "debug": "^4.3.2",
     "fastify": "^3.22.1",
     "fastify-cors": "^6.0.2",
     "fastify-swagger": "^4.12.6",
     "fastq": "^1.13.0",
     "fs": "^0.0.1-security",
+    "node-fetch": "^2.6.6",
     "path": "^0.12.7",
     "request": "^2.88.2",
     "stream": "^0.0.2",
     "string-to-stream": "^3.0.1",
     "uuid": "^3.4.0",
-    "webdav": "^4.7.0"
+    "webdav": "^4.7.0",
+    "webdav-tulip": "^1.0.1"
   }
 }

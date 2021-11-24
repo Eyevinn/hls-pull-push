@@ -4,7 +4,6 @@ import * as path from "path";
 import { HLSRecorder, ISegments, PlaylistType } from "@eyevinn/hls-recorder";
 import { promise as fastq } from "fastq";
 import * as fs from "fs";
-import str2stream from "string-to-stream";
 import {
   GetOnlyNewestSegments,
   ReplaceSegmentURLs,
@@ -12,17 +11,18 @@ import {
   PushSegments,
 } from "../util/handleSegments";
 import { AuthType, createClient, WebDAVClient } from "webdav";
+//const createClient = require("webdav-tulip");
 import { ListOriginEndpointsCommand } from "@aws-sdk/client-mediapackage";
 import {
   GenerateAudioM3U8,
   GenerateMediaM3U8,
   GenerateSubtitleM3U8,
 } from "@eyevinn/hls-recorder/dist/util/manifest_generator";
+import { Stream } from "stream";
 const debug = require("debug")("hls-pull-push");
 const request = require("request");
 const stream = require("stream");
-const test_webdav_url =
-  "https://033c20e6acf79d8f.mediapackage.eu-north-1.amazonaws.com/in/v2/0c06aa5a898c44bd9850240df5bb2621/0c06aa5a898c44bd9850240df5bb2621/channel	";
+const fetch = require("node-fetch");
 //require("dotenv").config();
 //const { AwsUploadModule } = require("@eyevinn/iaf-plugin-aws-s3");
 
@@ -35,9 +35,7 @@ channel_10.m3u8`;
 const master_10_channel = `#EXTM3U
 #EXT-X-VERSION:3
 #EXT-X-TARGETDURATION:6
-#EXT-X-MEDIA-SEQUENCE:0
-#EXTINF:6.000,
-channel_10_0.ts
+#EXT-X-MEDIA-SEQUENCE:1
 #EXTINF:6.000,
 channel_10_1.ts
 #EXTINF:6.000,
@@ -75,7 +73,7 @@ export class Session {
   sourceURL: string;
   name: string;
   destination: string;
-  client: WebDAVClient;
+  client: any; //WebDAVClient;
   masterM3U8: any;
   m3u8Queue: any;
   segQueue: any;
@@ -110,23 +108,17 @@ export class Session {
       subtitle: {},
     };
 
-    // this.client = createClient(test_webdav_url, {
-    //   authType: AuthType.Digest,
-    //   username: "ab5b475b8d374274b98d59941c3d5e60",
-    //   password: "f74bd6249b9b44e7a3a20d8316e36060",
-    // });
-
     const mediaPackageEndpoints = [
       {
         url: "https://033c20e6acf79d8f.mediapackage.eu-north-1.amazonaws.com/in/v2/8bca7c5e42d94296896a317c72714087/8bca7c5e42d94296896a317c72714087/channel",
         username: "1ebc30055d804b32b36325bab629f8f3",
         password: "ee179b8d5d4b40a2ab8eab2fd9c5a536",
       },
-      {
-        url: "https://1787c7637adb4d19.mediapackage.eu-north-1.amazonaws.com/in/v2/8bca7c5e42d94296896a317c72714087/106d0a9077164f1c8c3df3c9af714c21/channel",
-        username: "283924cb81914516bc15f4f26e495579",
-        password: "ea22805741844bb89db0dd1b8291657b",
-      },
+      // {
+      //   url: "https://1787c7637adb4d19.mediapackage.eu-north-1.amazonaws.com/in/v2/8bca7c5e42d94296896a317c72714087/106d0a9077164f1c8c3df3c9af714c21/channel",
+      //   username: "283924cb81914516bc15f4f26e495579",
+      //   password: "ea22805741844bb89db0dd1b8291657b",
+      // },
     ];
 
     const putToMediaPackage = async function (mediaPackageEndpoints, fileName, data) {
@@ -137,35 +129,14 @@ export class Session {
           username: mediaPackageEndpoints[i].username,
           password: mediaPackageEndpoints[i].password,
           authType: AuthType.Digest,
-          headers: {
-            "Content-Type": "application/vnd.apple.mpegurl",
-          },
-        });
-        let outurl =
-          "https://e85dc9675199b759.mediapackage.eu-north-1.amazonaws.com/out/v1/ff6080e92e8b4b79af2cd322039bcf64";
-        const client2 = createClient(outurl, {
-          username: mediaPackageEndpoints[i].username,
-          password: mediaPackageEndpoints[i].password,
-          authType: AuthType.Digest,
-          headers: {
-            "Content-Type": "application/vnd.apple.mpegurl",
-          },
         });
         try {
-          // Try Upload master manifest
-          client
-            .putFileContents(fileName, data, {
-              overwrite: true,
-            })
-            .then((bool) => {
-              console.log(" webDAV PUT " + fileName, bool);
-              status = bool;
-            });
-
-          // Then Try Read Uploaded file
-          client2.getFileContents("/channel.m3u8", { format: "text" }).then((archiveRaw) => {
-            console.log("webDAV response::", archiveRaw.toString("utf-8")); // ->  ''
+          // Try Upload manifest
+          let bool = await client.putFileContents(fileName, data, {
+            overwrite: true,
           });
+          console.log(" webDAV PUT " + fileName, bool, mediaPackageEndpoints[i].username);
+          status = bool;
         } catch (e) {
           console.error("(!): Trouble in 'putFileContents'", e);
           throw new Error(e);
@@ -192,27 +163,18 @@ export class Session {
         const endpoints = item.mp_endpoints;
         const fileName = path.basename(segURI);
 
-        const segmentFileName = fileName.replace("channel", "channel");
+        const segmentFileName = fileName.replace("master", "channel");
         debug("Inside: s3UploadSegment, ", segmentFileName);
-        let contentType;
-        if (fileName.match(/.ts$/)) {
-          contentType = "video/MP2T";
-        } else {
-          // Assume Subtitle file
-          contentType = "text/vtt";
-        }
 
-        const fileStream = new stream.PassThrough();
-
-        request(segURI)
-          .on("error", (err) => {
-            console.error(`Segment Request Error! ${err}`);
+        fetch(segURI)
+          .then((res) => res.buffer())
+          .then(async (buffer) => {
+            await putToMediaPackage(endpoints, segmentFileName, buffer);
+            return { message: "Segment uploaded..." };
           })
-          .pipe(fileStream);
-
-        await putToMediaPackage(endpoints, segmentFileName, fileStream);
-
-        return { message: "Segment uploaded..." };
+          .catch((err) => {
+            throw new Error(err);
+          });
       } catch (err) {
         console.error(err);
         return Promise.reject(err);
@@ -273,17 +235,25 @@ export class Session {
         this.previousSegCount = data.allPlaylistSegments["video"][bw].segList.length;
 
         debug(
-          `[${this.sessionId}][][][] TODO [][][]: Trying to Push all new hlsrecorder segments to Media Package: ${this.created}`
+          `[${this.sessionId}]: Trying to Push all new hlsrecorder segments to Media Package: ${this.created}`
         );
+        // Upload Master If not already done...
         if (!this.masterM3U8) {
           this.masterM3U8 = this.hlsrecorder.masterManifest;
           try {
-            console.log("___GONNA TRY putToMediaPackage___");
+            console.log(
+              "___GONNA TRY master to putToMediaPackage___",
+              mediaPackageEndpoints.length
+            );
+            let master_m3u8: string = this.hlsrecorder.masterManifest;
+            const masterToBeUploaded: string = master_m3u8.replace("master", "channel_");
+            console.log 
             this.client = await putToMediaPackage(
               mediaPackageEndpoints,
               "channel.m3u8",
-              master_channel //this.hlsrecorder.masterManifest
+              masterToBeUploaded
             );
+            console.log("PUT Master Complete");
           } catch (error) {
             console.error("(!) Issue with webDAV");
             throw new Error(error);
@@ -293,11 +263,11 @@ export class Session {
         let tasksSegments;
         try {
           // Upload all newest segments to S3 Bucket
-          tasksSegments = []; //await this._UploadAllSegments(
-          //   mediaPackageEndpoints,
-          //   this.segQueue,
-          //   BottomSegs
-          // );
+          tasksSegments = await this._UploadAllSegments(
+            mediaPackageEndpoints,
+            this.segQueue,
+            BottomSegs
+          );
           SegmentsWithNewURL = ReplaceSegmentURLs(this.collectedSegments);
           const resultsSegments = [];
           for (let result of tasksSegments) {
@@ -305,7 +275,7 @@ export class Session {
           }
           debug(`[${this.sessionId}]: Finished uploading all segments!`);
           if (this.atFirstIncrement || this.sourceIsEvent || this.active) {
-            // Upload Recording Master & Playlist Manifest to S3 Bucket
+            // Upload Recording Playlist Manifest to S3 Bucket
             let tasksManifest = await this._UploadAllManifest(
               mediaPackageEndpoints,
               this.m3u8Queue,
@@ -375,6 +345,7 @@ export class Session {
             mp_endpoints: endpoints,
             segment_uri: segmentUri,
           };
+          console.log('pushed a Segment Upload Task')
           tasks.push(taskQueue.push(item));
         }
       });
@@ -440,11 +411,12 @@ export class Session {
         allSegments: segments,
       };
       GenerateMediaM3U8(parseInt(bw), generatorOptions).then((playlistM3u8) => {
-        const name = `channel_10.m3u8`; //${bw}.m3u8`;
+        const playlistToBeUploaded: string = playlistM3u8.replace("master", "channel");
+        const name = `channel_${bw}.m3u8`;
         let item = {
           mp_endpoints: endpoints,
           file_name: name,
-          data: master_10_channel, //playlistM3u8,
+          data: playlistToBeUploaded,
         };
         tasks.push(taskQueue.push(item));
       });
