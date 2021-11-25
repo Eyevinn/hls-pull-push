@@ -3,7 +3,7 @@
 // Helper Functions
 // ********************/
 import * as path from "path";
-import { ISegments, PlaylistType } from "@eyevinn/hls-recorder";
+import { ISegments, PlaylistType, Segment } from "@eyevinn/hls-recorder";
 const debug = require("debug")("hls-pull-push");
 /**
  * Function extracts new segment items based on the difference in media sequence
@@ -143,6 +143,7 @@ export const UploadAllSegments = async (uploader, taskQueue, segments, folder) =
   return tasks;
 };
 
+/* These URLs will be what is written in the playlist manifest we later generate */
 export const ReplaceSegmentURLs = (segments) => {
   // Before altering key values - Make deep copy.
   segments = JSON.parse(JSON.stringify(segments));
@@ -153,14 +154,15 @@ export const ReplaceSegmentURLs = (segments) => {
   bandwidths.forEach((bw) => {
     let segListSize = segments["video"][bw].segList.length;
     for (let i = 0; i < segListSize; i++) {
-      const segmentUri = segments["video"][bw].segList[i].uri;
+      const segmentUri: Segment = segments["video"][bw].segList[i].uri;
       if (segmentUri) {
-        const replacementUrl = path.basename(segments["video"][bw].segList[i].uri);
+        //const replacementUrl = path.basename(segments["video"][bw].segList[i].uri);
+        const replacementUrl = `channel_${bw}_${segments["video"][bw].segList[i].index}.ts` // assuming input is MPEG TS-file.
         segments["video"][bw].segList[i].uri = replacementUrl;
       }
     }
   });
-
+  // TODO: update here too
   if (groups.length > 0) {
     groups.forEach((group) => {
       const languages = Object.keys(segments["audio"][group]);

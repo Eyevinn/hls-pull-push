@@ -161,15 +161,15 @@ export class Session {
       try {
         const segURI = item.segment_uri;
         const endpoints = item.mp_endpoints;
-        const fileName = path.basename(segURI);
+        const fileName = item.file_name;//path.basename(segURI);
 
-        const segmentFileName = fileName.replace("master", "channel");
-        debug("Inside: s3UploadSegment, ", segmentFileName);
+        //const segmentFileName = fileName.replace("master", "channel");
+        debug("Inside: s3UploadSegment, ", fileName);
 
         fetch(segURI)
           .then((res) => res.buffer())
           .then(async (buffer) => {
-            await putToMediaPackage(endpoints, segmentFileName, buffer);
+            await putToMediaPackage(endpoints, fileName, buffer);
             return { message: "Segment uploaded..." };
           })
           .catch((err) => {
@@ -341,16 +341,18 @@ export class Session {
       bandwidths.forEach((bw) => {
         const segmentUri = segments["video"][bw].segList[i].uri;
         if (segmentUri) {
+          const segmentFileName = `channel_${bw}_${segments["video"][bw].segList[i].index}.ts`
           let item = {
             mp_endpoints: endpoints,
             segment_uri: segmentUri,
+            file_name: segmentFileName
           };
           console.log('pushed a Segment Upload Task')
           tasks.push(taskQueue.push(item));
         }
       });
     }
-
+/*
     // For Demux Audio
     if (groupsAudio.length > 0) {
       // Start pushing segments for all variants before moving on the next
@@ -395,6 +397,8 @@ export class Session {
         });
       }
     }
+    */
+
     return tasks;
   }
 
@@ -421,6 +425,7 @@ export class Session {
         tasks.push(taskQueue.push(item));
       });
     });
+    /*
     // For Demux Audio
     if (groupsAudio.length > 0) {
       groupsAudio.forEach(async (group) => {
@@ -467,6 +472,7 @@ export class Session {
         }
       });
     }
+    */
     return tasks;
   }
 }
