@@ -52,7 +52,7 @@ Example MediaPackage:
       "url": "https://033c20e6acf79d8f.mediapackage.eu-north-1.amazonaws.com/in/v2/8bca7c5e42d94296896a317c72714087/8bca7c5e42d94296896a317c72714087/channel",
       "username": "***",
       "password": "***"
-    }
+    } ]
   }
 }
 ```
