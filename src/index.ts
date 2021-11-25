@@ -2,6 +2,7 @@ import fastify, { FastifyInstance, FastifyRequest } from "fastify";
 import { HLSRecorder } from "@eyevinn/hls-recorder";
 import { Schemas } from "../util/schemas";
 import { Session } from "../util/session";
+import { IOutputPlugin, IOutputPluginDest } from "../types/output_plugin";
 
 export interface IDestPayload {
   destination: string;
@@ -18,15 +19,17 @@ interface IRequestBody {
   url: string;
   dest?: any;
 }
-
+const PLUGINS = {}
 export class HLSPullPush {
   private server: FastifyInstance;
-  private dest: any;
-  private SESSIONS: any;
+  PLUGINS: Object;
+  instanceId: number;
 
-  constructor(options) {
+  constructor() {
     const SESSIONS = {}; // in memory store
-    this.dest = options?.dest;
+    //this.PLUGINS = {};
+    this.instanceId = 1;
+
     this.server = fastify({ ignoreTrailingSlash: true });
     this.server.register(require("fastify-swagger"), {
       routePrefix: "/api/docs",
@@ -48,17 +51,37 @@ export class HLSPullPush {
       function (fastify, opts, done) {
         fastify.post("/fetcher", { schema: Schemas["POST/fetcher"] }, async (request, reply) => {
           try {
+            //console.log(`[${this.instanceId}]: I got a POST request`);
             const requestBody: any = request.body;
-            if (!requestBody || !requestBody.name || !requestBody.url || !requestBody.dest) {
+            if (
+              !requestBody ||
+              !requestBody.name ||
+              !requestBody.url ||
+              !requestBody.plugin ||
+              !requestBody.payload
+            ) {
               reply.code(404).send("Missing request body keys");
             }
             // Check if string is valid url
             const url = new URL(requestBody.url);
+            // Get Plugin from register if valid
+            const requestedPlugin: IOutputPlugin = _getPluginFor(requestBody.plugin);
+            if (!requestedPlugin) {
+              reply.code(404).send(`Unsupported Plugin Type '${requestBody.plugin}'`);
+            }
+            // Generate instance of plugin destination if valid
+            let outputDest: IOutputPluginDest;
+            try {
+              outputDest = requestedPlugin.createOutputDestination(requestBody.payload);
+            } catch (err) {
+              console.error(err)
+              reply.code(404).send(JSON.stringify(err));
+            }
             // Create new session and add to local store
             const session = new Session({
               name: requestBody.name,
               url: url.href,
-              dest: requestBody.dest,
+              dest: outputDest,
               concurrency: null,
             });
             // Store Hls recorder in dictionary in-memory
@@ -71,12 +94,7 @@ export class HLSPullPush {
             reply.code(200).send({
               message: "Created an Fetcher and started pulling from HLS Live Stream",
               fetcherId: session.sessionId,
-              requestData: {
-                name: requestBody.name,
-                url: url.href,
-                dest: requestBody.dest,
-                concurrency: null,
-              },
+              requestData: requestBody,
             });
           } catch (err) {
             reply.code(500).send(err.message);
@@ -133,6 +151,10 @@ export class HLSPullPush {
     );
   }
 
+  registerPlugin(name: string, plugin: IOutputPlugin): void {
+    PLUGINS[name] = plugin;
+  }
+
   listen(port) {
     this.server.listen(port, "0.0.0.0", (err, address) => {
       if (err) {
@@ -141,4 +163,12 @@ export class HLSPullPush {
       console.log(`Server listening at ${address}`);
     });
   }
+}
+function _getPluginFor(name: string): IOutputPlugin {
+  console.log(`PLUGINS has [${Object.keys(PLUGINS)}], input arg is = ${name}`);
+  const result = PLUGINS[name];
+  if (!result) {
+    return null;
+  }
+  return result;
 }

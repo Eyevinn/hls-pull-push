@@ -157,7 +157,7 @@ export const ReplaceSegmentURLs = (segments) => {
       const segmentUri: Segment = segments["video"][bw].segList[i].uri;
       if (segmentUri) {
         //const replacementUrl = path.basename(segments["video"][bw].segList[i].uri);
-        const replacementUrl = `channel_${bw}_${segments["video"][bw].segList[i].index}.ts` // assuming input is MPEG TS-file.
+        const replacementUrl = `channel_${bw}_${segments["video"][bw].segList[i].index}.ts`; // assuming input is MPEG TS-file.
         segments["video"][bw].segList[i].uri = replacementUrl;
       }
     }
@@ -222,7 +222,9 @@ export const PushSegments = (
           } else {
             segInfo = `other hls tag`;
           }
-          debug(`[${sessionId}]: Added Segments(${segInfo}) to Cache-HLS Playlist_${bw}`);
+          debug(
+            `[${sessionId}]: Added Segments(${segInfo}) to Cache-HLS Playlist_${bw}\n${newVideoSegment.uri}`
+          );
         }
       }
     }

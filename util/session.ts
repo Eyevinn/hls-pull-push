@@ -4,20 +4,11 @@ import * as path from "path";
 import { HLSRecorder, ISegments, PlaylistType } from "@eyevinn/hls-recorder";
 import { promise as fastq } from "fastq";
 import * as fs from "fs";
-import {
-  GetOnlyNewestSegments,
-  ReplaceSegmentURLs,
-  UploadAllSegments,
-  PushSegments,
-} from "../util/handleSegments";
+import { GetOnlyNewestSegments, ReplaceSegmentURLs, UploadAllSegments, PushSegments } from "../util/handleSegments";
 import { AuthType, createClient, WebDAVClient } from "webdav";
 //const createClient = require("webdav-tulip");
 import { ListOriginEndpointsCommand } from "@aws-sdk/client-mediapackage";
-import {
-  GenerateAudioM3U8,
-  GenerateMediaM3U8,
-  GenerateSubtitleM3U8,
-} from "@eyevinn/hls-recorder/dist/util/manifest_generator";
+import { GenerateAudioM3U8, GenerateMediaM3U8, GenerateSubtitleM3U8 } from "@eyevinn/hls-recorder/dist/util/manifest_generator";
 import { Stream } from "stream";
 const debug = require("debug")("hls-pull-push");
 const request = require("request");
@@ -31,6 +22,20 @@ const master_channel = `#EXTM3U
 #EXT-X-INDEPENDENT-SEGMENTS
 #EXT-X-STREAM-INF:BANDWIDTH=2962000,AVERAGE-BANDWIDTH=3031000,RESOLUTION=1280x720,CODECS="avc1.66.30",FRAME-RATE=24.000
 channel_10.m3u8`;
+
+const better_master = `#EXTM3U
+#EXT-X-VERSION:3
+#EXT-X-INDEPENDENT-SEGMENTS
+#EXT-X-STREAM-INF:BANDWIDTH=550172,AVERAGE-BANDWIDTH=3031000,RESOLUTION=256x106,CODECS="avc1.66.30",FRAME-RATE=24.000
+channel_550172.m3u8
+#EXT-X-STREAM-INF:BANDWIDTH=1650064,AVERAGE-BANDWIDTH=3031000,RESOLUTION=640x266,CODECS="avc1.66.30",FRAME-RATE=24.000
+channel_1650064.m3u8
+#EXT-X-STREAM-INF:BANDWIDTH=2749539,AVERAGE-BANDWIDTH=3031000,RESOLUTION=1280x534,CODECS="avc1.66.30",FRAME-RATE=24.000
+channel_2749539.m3u8
+#EXT-X-STREAM-INF:BANDWIDTH=4947980,AVERAGE-BANDWIDTH=3031000,RESOLUTION=1920x800,CODECS="avc1.66.30",FRAME-RATE=24.000
+channel_4947980.m3u8
+#EXT-X-STREAM-INF:BANDWIDTH=8247438,AVERAGE-BANDWIDTH=3031000,RESOLUTION=1920x800,CODECS="avc1.66.30",FRAME-RATE=24.000
+channel_8247438.m3u8`;
 
 const master_10_channel = `#EXTM3U
 #EXT-X-VERSION:3
@@ -77,6 +82,7 @@ export class Session {
   masterM3U8: any;
   m3u8Queue: any;
   segQueue: any;
+  outputDestination: any;
 
   constructor(params) {
     this.sessionId = uuid();
@@ -99,7 +105,7 @@ export class Session {
     } else {
       this.concurrentWorkers = parseInt(process.env.DEFAULT_UPLOAD_CONCURRENCY) || 10;
     }
-    this.destination = params.dest;
+    this.outputDestination = params.dest;
     this.active = true;
     this.sourcePrevMseq = 0;
     this.collectedSegments = {
@@ -145,42 +151,45 @@ export class Session {
       return status;
     };
 
-    const manifestUploader = async (item) => {
-      try {
-        await putToMediaPackage(item.mp_endpoints, item.file_name, item.data);
-        return { message: `Manifest (${item.file_name}) uploaded...` };
-      } catch (err) {
-        console.error(err);
-        return Promise.reject(err);
-      }
-    };
-    this.m3u8Queue = fastq(manifestUploader, 5);
+    // const manifestUploader = async (item) => {
+    //   try {
+    //     await putToMediaPackage(item.mp_endpoints, item.file_name, item.data);
+    //     return { message: `Manifest (${item.file_name}) uploaded...` };
+    //   } catch (err) {
+    //     console.error(err);
+    //     return Promise.reject(err);
+    //   }
+    // };
+    // this.m3u8Queue = fastq(manifestUploader, 5);
 
-    // eslint-disable-next-line no-unused-vars
-    const segmentUploader = async (item) => {
-      try {
-        const segURI = item.segment_uri;
-        const endpoints = item.mp_endpoints;
-        const fileName = item.file_name;//path.basename(segURI);
+    // // eslint-disable-next-line no-unused-vars
+    // const segmentUploader = async (item) => {
+    //   try {
+    //     const segURI = item.segment_uri;
+    //     const endpoints = item.mp_endpoints;
+    //     const fileName = item.file_name; //path.basename(segURI);
 
-        //const segmentFileName = fileName.replace("master", "channel");
-        debug("Inside: s3UploadSegment, ", fileName);
+    //     //const segmentFileName = fileName.replace("master", "channel");
+    //     debug("Inside: s3UploadSegment, ", fileName);
 
-        fetch(segURI)
-          .then((res) => res.buffer())
-          .then(async (buffer) => {
-            await putToMediaPackage(endpoints, fileName, buffer);
-            return { message: "Segment uploaded..." };
-          })
-          .catch((err) => {
-            throw new Error(err);
-          });
-      } catch (err) {
-        console.error(err);
-        return Promise.reject(err);
-      }
-    };
-    this.segQueue = fastq(segmentUploader, 5);
+    //     fetch(segURI)
+    //       .then((res) => res.buffer())
+    //       .then(async (buffer) => {
+    //         await putToMediaPackage(endpoints, fileName, buffer);
+    //         return { message: "Segment uploaded..." };
+    //       })
+    //       .catch((err) => {
+    //         throw new Error(err);
+    //       });
+    //   } catch (err) {
+    //     console.error(err);
+    //     return Promise.reject(err);
+    //   }
+    // };
+    // this.segQueue = fastq(segmentUploader, 5);
+
+    this.m3u8Queue = fastq(this.outputDestination.uploadMediaPlaylist.bind(this.outputDestination), this.concurrentWorkers);
+    this.segQueue = fastq(this.outputDestination.uploadMediaSegment.bind(this.outputDestination), this.concurrentWorkers);
 
     // .----------------------------------------------.
     // *** Processing new recorder segment items ***  |
@@ -197,9 +206,7 @@ export class Session {
         }
         const segsVideo = data.allPlaylistSegments["video"];
         debug(
-          `[${
-            this.sessionId
-          }]: HLSRecorder event triggered. Recieved new segments. Totals amount per variant=${
+          `[${this.sessionId}]: HLSRecorder event triggered. Recieved new segments. Totals amount per variant=${
             segsVideo[Object.keys(segsVideo)[0]].segList.length
           }`
         );
@@ -208,15 +215,10 @@ export class Session {
           audio: {},
           subtitle: {},
         };
-        if (this.atFirstIncrement && data.type !== PlaylistType.VOD) {
+        if (this.atFirstIncrement && data.type === PlaylistType.VOD) {
           BottomSegs = Object.assign({}, data.allPlaylistSegments);
         } else {
-          BottomSegs = GetOnlyNewestSegments(
-            data.allPlaylistSegments,
-            this.previousMseq,
-            this.previousSegCount,
-            data.type
-          );
+          BottomSegs = GetOnlyNewestSegments(data.allPlaylistSegments, this.previousMseq, this.previousSegCount, data.type);
         }
         let bw = Object.keys(BottomSegs["video"])[0];
 
@@ -234,25 +236,17 @@ export class Session {
         this.previousMseq = BottomSegs["video"][bw].mediaSeq;
         this.previousSegCount = data.allPlaylistSegments["video"][bw].segList.length;
 
-        debug(
-          `[${this.sessionId}]: Trying to Push all new hlsrecorder segments to Media Package: ${this.created}`
-        );
+        debug(`[${this.sessionId}]: Trying to Push all new hlsrecorder segments to Media Package: ${this.created}`);
         // Upload Master If not already done...
         if (!this.masterM3U8) {
-          this.masterM3U8 = this.hlsrecorder.masterManifest;
           try {
-            console.log(
-              "___GONNA TRY master to putToMediaPackage___",
-              mediaPackageEndpoints.length
-            );
-            let master_m3u8: string = this.hlsrecorder.masterManifest;
-            const masterToBeUploaded: string = master_m3u8.replace("master", "channel_");
-            console.log 
-            this.client = await putToMediaPackage(
-              mediaPackageEndpoints,
-              "channel.m3u8",
-              masterToBeUploaded
-            );
+            console.log("[debug]: ___GONNA TRY upload master manifest___");
+            this.masterM3U8 = this.outputDestination.generateMultiVariantPlaylist(this.hlsrecorder.masterManifest);
+            await this.outputDestination.uploadMediaPlaylist({
+              fileName: "channel.m3u8",
+              fileData: better_master,
+            });
+            console.log(3, "await this.outputDestination.uploadMediaPlaylist");
             console.log("PUT Master Complete");
           } catch (error) {
             console.error("(!) Issue with webDAV");
@@ -262,26 +256,23 @@ export class Session {
         let SegmentsWithNewURL;
         let tasksSegments;
         try {
+          console.log(4, "await this._UploadAllSegments");
           // Upload all newest segments to S3 Bucket
-          tasksSegments = await this._UploadAllSegments(
-            mediaPackageEndpoints,
-            this.segQueue,
-            BottomSegs
-          );
+          tasksSegments = await this._UploadAllSegments(this.segQueue, BottomSegs);
+          // Make Segment Urls formatted and ready for Manifest Generation
           SegmentsWithNewURL = ReplaceSegmentURLs(this.collectedSegments);
+          // Let the Workers Work!
           const resultsSegments = [];
           for (let result of tasksSegments) {
+            console.log(5, "await result");
             resultsSegments.push(await result);
           }
           debug(`[${this.sessionId}]: Finished uploading all segments!`);
+
           if (this.atFirstIncrement || this.sourceIsEvent || this.active) {
             // Upload Recording Playlist Manifest to S3 Bucket
-            let tasksManifest = await this._UploadAllManifest(
-              mediaPackageEndpoints,
-              this.m3u8Queue,
-              SegmentsWithNewURL,
-              this.segmentTargetDuration
-            );
+            let tasksManifest = await this._UploadAllManifest(this.m3u8Queue, SegmentsWithNewURL, this.segmentTargetDuration);
+            // Let the Workers Work!
             const resultsManifest = [];
             for (let result of tasksManifest) {
               resultsManifest.push(await result);
@@ -291,7 +282,7 @@ export class Session {
         } catch (err) {
           console.error(err);
         }
-
+        console.log(6, "this.atFirstIncrement = false;");
         // Set to False, no longer first increment
         this.atFirstIncrement = false;
       }
@@ -330,7 +321,7 @@ export class Session {
 
   /** PRIVATE FUNCTUIONS */
 
-  async _UploadAllSegments(endpoints, taskQueue, segments) {
+  async _UploadAllSegments(taskQueue, segments) {
     const tasks = [];
     const bandwidths = Object.keys(segments["video"]);
     const groupsAudio = Object.keys(segments["audio"]);
@@ -341,18 +332,18 @@ export class Session {
       bandwidths.forEach((bw) => {
         const segmentUri = segments["video"][bw].segList[i].uri;
         if (segmentUri) {
-          const segmentFileName = `channel_${bw}_${segments["video"][bw].segList[i].index}.ts`
+          // Design of the File Name here:
+          const segmentFileName = `channel_${bw}_${segments["video"][bw].segList[i].index}.ts`;
           let item = {
-            mp_endpoints: endpoints,
             segment_uri: segmentUri,
-            file_name: segmentFileName
+            file_name: segmentFileName,
           };
-          console.log('pushed a Segment Upload Task')
+          console.log("pushed a Segment Upload Task");
           tasks.push(taskQueue.push(item));
         }
       });
     }
-/*
+    /*
     // For Demux Audio
     if (groupsAudio.length > 0) {
       // Start pushing segments for all variants before moving on the next
@@ -402,7 +393,7 @@ export class Session {
     return tasks;
   }
 
-  async _UploadAllManifest(endpoints, taskQueue, segments, targetDuration) {
+  async _UploadAllManifest(taskQueue, segments, targetDuration) {
     const tasks = [];
     const bandwidths = Object.keys(segments["video"]);
     const groupsAudio = Object.keys(segments["audio"]);
@@ -415,12 +406,21 @@ export class Session {
         allSegments: segments,
       };
       GenerateMediaM3U8(parseInt(bw), generatorOptions).then((playlistM3u8) => {
-        const playlistToBeUploaded: string = playlistM3u8.replace("master", "channel");
+        const playlistToBeUploaded: string = playlistM3u8.replaceAll("master", "channel");
+        let stri = playlistToBeUploaded.split(/#EXT-X-MEDIA-SEQUENCE:(\d)/);
+        let head =
+          "#EXTM3U\n" +
+          "#EXT-X-VERSION:3\n" +
+          "#EXT-X-TARGETDURATION:" +
+          generatorOptions.targetDuration +
+          "\n" +
+          "#EXT-X-MEDIA-SEQUENCE:" +
+          generatorOptions.mseq;
+        head += stri[2];
         const name = `channel_${bw}.m3u8`;
         let item = {
-          mp_endpoints: endpoints,
-          file_name: name,
-          data: playlistToBeUploaded,
+          fileName: name,
+          fileData: head,
         };
         tasks.push(taskQueue.push(item));
       });
