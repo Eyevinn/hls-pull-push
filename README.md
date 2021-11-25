@@ -9,16 +9,15 @@ npm install --save @eyevinn/hls-pull-push
 ## Usage
 
 ```
-const { HLSPullPush, WebDAV } = require("@eyevinn/hls-pull-push");
+import { HLSPullPush, MediaPackageOutput, S3Output } from "@eyevinn/hls-pull-push";
 
-const destPlugin = new WebDAV({
-  destination: "webdav://destination",
-  username: USERNAME,
-  password: PASSWORD
-});
-const pullPushService = new HLSPullPush({
-  dest: destPlugin
-});
+const pullPushService = new HLSPullPush();
+pullPushService.registerPlugin("mediapackage", new MediaPackageOutput());
+pullPushService.registerPlugin("s3", new S3Output({ 
+  region: "eu-north-1",
+  access_key_id: "***"
+  secret_access_key: "***",
+}));
 pullPushService.listen(process.env.PORT || 8080);
 ```
 
@@ -35,9 +34,38 @@ pullPushService.listen(process.env.PORT || 8080);
 
 ```
 {
-  "name": <string>,  // Name of session
-  "url": <string>,   // Reachable HTTP url to HLS live stream
-  "dest": IDestPayload,  // Destination plugin specific destination payload
+  "name": <string>,    // Name of session
+  "url": <string>,     // Reachable HTTP url to HLS live stream
+  "output": <string>,  // Output plugin name 
+  "payload": <json>,   // Output plugin specific destination payload
+}
+```
+
+Example MediaPackage:
+```
+{
+  "name": "eyevinn",
+  "url": "https://demo.vc.eyevinn.technology/channels/eyevinn/master.m3u8",
+  "output": "mediapackage",
+  "payload": {
+    "ingestUrls [ { 
+      "url": "https://033c20e6acf79d8f.mediapackage.eu-north-1.amazonaws.com/in/v2/8bca7c5e42d94296896a317c72714087/8bca7c5e42d94296896a317c72714087/channel",
+      "username": "***",
+      "password": "***"
+    }
+  }
+}
+```
+
+Example S3:
+```
+{
+  "name": "s3cache",
+  "url": "https://demo.vc.eyevinn.technology/channels/eyevinn/master.m3u8",
+  "output": "s3",
+  "payload": {
+    "bucket": "origin-live"
+  }
 }
 ```
 
