@@ -13,88 +13,85 @@ const debug = require("debug")("hls-pull-push");
  */
 export const GetOnlyNewestSegments = (
   Segments: ISegments,
-  prevMediaSeq: number | null,
-  prevSegCount: number | null,
-  playlistType: number
+  latestSegmentIndex: number
 ): ISegments => {
-  let lastSegments = {
+  let newestSegments = {
     video: {},
     audio: {},
     subtitle: {},
   };
   const Bandwidths = Object.keys(Segments["video"]);
-  const newMseq = Segments["video"][Bandwidths[0]].mediaSeq;
   const newSegCount = Segments["video"][Bandwidths[0]].segList.length;
 
-  let sliceOffset = 1;
-  if (playlistType === PlaylistType.EVENT || playlistType === PlaylistType.VOD) {
-    let countDiff;
-    if (prevSegCount === 0) {
-      // If first time then only collect the last segment.
-      // Remove to add everything on first time.
-      countDiff = 1;
-    } else {
-      countDiff = newSegCount - prevSegCount;
-    }
-    sliceOffset = countDiff <= 0 ? 1 : countDiff;
+  const position = Segments["video"][Bandwidths[0]].segList.findIndex(
+    (seg) => seg.index === latestSegmentIndex
+  );
+  let sliceOffset: number;
+  if (position === -1) {
+    sliceOffset = 1; // <--- If we don't want to collect everything, then specify how namy here.
   } else {
-    // **[ Playlist type is LIVE ]**
-    let mseqDiff;
-    if (prevMediaSeq === 0) {
-      // If first time then only collect the last segment.
-      // Remove to add everything on first time.
-      mseqDiff = 1;
-    } else {
-      mseqDiff = newMseq - prevMediaSeq;
-    }
-    sliceOffset = mseqDiff <= 0 ? 1 : mseqDiff;
+    sliceOffset = newSegCount - position - 1;
   }
 
   // First Get Video Segments...
   Bandwidths.forEach((bw) => {
-    lastSegments["video"][bw] = {
+    newestSegments["video"][bw] = {
       mediaSeq: -1,
       segList: [],
     };
     // Before altering key values - Make deep copy.
     let segmentList = JSON.parse(JSON.stringify(Segments["video"][bw].segList));
-    lastSegments["video"][bw].mediaSeq = Segments["video"][bw].mediaSeq;
-    lastSegments["video"][bw].segList = segmentList.slice(-1 * sliceOffset);
+    newestSegments["video"][bw].mediaSeq = Segments["video"][bw].mediaSeq;
+    newestSegments["video"][bw].segList = segmentList.slice(newSegCount - sliceOffset);
   });
   // Second Get Audio Segments if any exists...
   for (let i = 0; i < Object.keys(Segments["audio"]).length; i++) {
     let group = Object.keys(Segments["audio"])[i];
-    lastSegments["audio"][group] = {};
+    newestSegments["audio"][group] = {};
     Object.keys(Segments["audio"][group]).forEach((lang) => {
-      lastSegments["audio"][group][lang] = {
+      newestSegments["audio"][group][lang] = {
         mediaSeq: -1,
         segList: [],
       };
-      lastSegments["audio"][group][lang].mediaSeq = Segments["audio"][group][lang].mediaSeq;
-      // eslint-disable-next-line standard/computed-property-even-spacing
-      let segmentList = JSON.parse(JSON.stringify(Segments["audio"][group][lang].segList));
-      // eslint-disable-next-line standard/computed-property-even-spacing
-      lastSegments["audio"][group][lang].segList = segmentList.slice(-1 * sliceOffset);
+      newestSegments["audio"][group][lang].mediaSeq =
+        Segments["audio"][group][lang].mediaSeq;
+      let segmentList = JSON.parse(
+        JSON.stringify(Segments["audio"][group][lang].segList)
+      );
+      newestSegments["audio"][group][lang].segList = segmentList.slice(
+        newSegCount - sliceOffset
+      );
     });
   }
   // Third Get Subtitles Segments if any exists...
   for (let i = 0; i < Object.keys(Segments["subtitle"]).length; i++) {
     let group = Object.keys(Segments["subtitle"])[i];
-    lastSegments["subtitle"][group] = {};
+    newestSegments["subtitle"][group] = {};
     Object.keys(Segments["subtitle"][group]).forEach((lang) => {
-      lastSegments["subtitle"][group][lang] = {
+      newestSegments["subtitle"][group][lang] = {
         mediaSeq: -1,
         segList: [],
       };
-      lastSegments["subtitle"][group][lang].mediaSeq = Segments["subtitle"][group][lang].mediaSeq;
-      let segmentList = JSON.parse(JSON.stringify(Segments["subtitle"][group][lang].segList));
-      lastSegments["subtitle"][group][lang].segList = segmentList.slice(-1 * sliceOffset);
+      newestSegments["subtitle"][group][lang].mediaSeq =
+        Segments["subtitle"][group][lang].mediaSeq;
+      let segmentList = JSON.parse(
+        JSON.stringify(Segments["subtitle"][group][lang].segList)
+      );
+      newestSegments["subtitle"][group][lang].segList = segmentList.slice(
+        newSegCount - sliceOffset
+      );
     });
   }
-  return lastSegments;
+  return newestSegments;
 };
 
-export const UploadAllSegments = async (uploader, taskQueue, segments, folder) => {
+// DELETE??
+export const UploadAllSegments = async (
+  uploader: any,
+  taskQueue: any,
+  segments: ISegments,
+  folder: string
+) => {
   const tasks = [];
   const bandwidths = Object.keys(segments["video"]);
   const groups = Object.keys(segments["audio"]);
@@ -144,25 +141,25 @@ export const UploadAllSegments = async (uploader, taskQueue, segments, folder) =
 };
 
 /* These URLs will be what is written in the playlist manifest we later generate */
-export const ReplaceSegmentURLs = (segments) => {
+export const ReplaceSegmentURLs = (segments: ISegments): ISegments => {
   // Before altering key values - Make deep copy.
   segments = JSON.parse(JSON.stringify(segments));
 
   const bandwidths = Object.keys(segments["video"]);
   const groups = Object.keys(segments["audio"]);
-
+  const subGroups = Object.keys(segments["subtitle"]);
+  // For Video
   bandwidths.forEach((bw) => {
     let segListSize = segments["video"][bw].segList.length;
     for (let i = 0; i < segListSize; i++) {
-      const segmentUri: Segment = segments["video"][bw].segList[i].uri;
+      const segmentUri: string = segments["video"][bw].segList[i].uri;
       if (segmentUri) {
-        //const replacementUrl = path.basename(segments["video"][bw].segList[i].uri);
         const replacementUrl = `channel_${bw}_${segments["video"][bw].segList[i].index}.ts`; // assuming input is MPEG TS-file.
         segments["video"][bw].segList[i].uri = replacementUrl;
       }
     }
   });
-  // TODO: update here too
+  // For Audio, if any exists
   if (groups.length > 0) {
     groups.forEach((group) => {
       const languages = Object.keys(segments["audio"][group]);
@@ -172,8 +169,25 @@ export const ReplaceSegmentURLs = (segments) => {
         for (let i = 0; i < segListSize; i++) {
           const segmentUri = segments["audio"][group][lang].segList[i].uri;
           if (segmentUri) {
-            const replacementUrl = path.basename(segments["audio"][group][lang].segList[i].uri);
+            const replacementUrl = `channel_a-${group}-${lang}_${segments["audio"][group][lang].segList[i].index}.ts`; // assuming input is MPEG TS-file.
             segments["audio"][group][lang].segList[i].uri = replacementUrl;
+          }
+        }
+      }
+    });
+  }
+  // For Subs, if any exists
+  if (subGroups.length > 0) {
+    subGroups.forEach((group) => {
+      const languages = Object.keys(segments["subtitle"][group]);
+      for (let k = 0; k < languages.length; k++) {
+        const lang = languages[k];
+        let segListSize = segments["subtitle"][group][lang].segList.length;
+        for (let i = 0; i < segListSize; i++) {
+          const segmentUri = segments["subtitle"][group][lang].segList[i].uri;
+          if (segmentUri) {
+            const replacementUrl = `channel_s-${group}-${lang}_${segments["subtitle"][group][lang].segList[i].index}.ts`; // assuming input is MPEG TS-file.
+            segments["subtitle"][group][lang].segList[i].uri = replacementUrl;
           }
         }
       }
@@ -244,7 +258,8 @@ export const PushSegments = (
             segList: [],
           };
         }
-        Segments["audio"][group][lang].mediaSeq = newSegments["audio"][group][lang].mediaSeq;
+        Segments["audio"][group][lang].mediaSeq =
+          newSegments["audio"][group][lang].mediaSeq;
 
         for (let idx = 0; idx < newSegments["audio"][group][lang].segList.length; idx++) {
           // update seglist
@@ -288,9 +303,14 @@ export const PushSegments = (
             segList: [],
           };
         }
-        Segments["subtitle"][group][lang].mediaSeq = newSegments["subtitle"][group][lang].mediaSeq;
+        Segments["subtitle"][group][lang].mediaSeq =
+          newSegments["subtitle"][group][lang].mediaSeq;
 
-        for (let idx = 0; idx < newSegments["subtitle"][group][lang].segList.length; idx++) {
+        for (
+          let idx = 0;
+          idx < newSegments["subtitle"][group][lang].segList.length;
+          idx++
+        ) {
           // update seglist
           let newsubtitleSegment = newSegments["subtitle"][group][lang].segList[idx];
           if (

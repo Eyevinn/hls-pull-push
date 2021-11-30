@@ -61,47 +61,20 @@ export class MediaPackageOutputDestination implements IOutputPluginDest {
         let bool = await client.putFileContents(opts.fileName, opts.fileData, {
           overwrite: true,
         });
+        // FOR DEBUGGING 
         if (typeof opts.fileData === "string") {
           console.log(opts.fileData);
         }
         console.log(
           `Upload Success: ${bool}. webDAV PUT '${opts.fileName}' to MediaPackage with username: ${this.ingestUrls[i].username}`
         );
+        
         return bool;
       } catch (e) {
         console.error("(!): Problem Occured when putting files to destination", e);
         throw new Error(e);
       }
     }
-
-    // return new Promise(async (resolve, reject) => {
-    //   // For each client/ingestUrl
-    //   for (let i = 0; i < this.webDAVClients.length; i++) {
-    //     const client = this.webDAVClients[i];
-    //     try {
-    //       // Try Upload manifest
-    //       let bool = await client.putFileContents(opts.fileName, opts.fileData, {
-    //         overwrite: true,
-    //       });
-    //       if (typeof opts.fileData === "string") {
-    //         console.log(opts.fileData);
-    //       }
-    //       console.log(
-    //         `Upload Success: ${bool}. webDAV PUT '${opts.fileName}' to MediaPackage with username: ${this.ingestUrls[i].username}`
-    //       );
-    //     } catch (e) {
-    //       console.error("(!): Problem Occured when putting files to destination", e);
-    //       reject(e);
-    //     }
-    //   }
-    //   resolve;
-    // });
-  }
-
-  generateMultiVariantPlaylist(manifest: string) {
-    // (!) Might need to recreate the manifest file from scratch if this is not enough.
-    const formatted = manifest.replaceAll("master", "channel_");
-    return formatted;
   }
 
   async uploadMediaPlaylist(opts: IFileUploaderOptions): Promise<boolean> {
@@ -115,23 +88,10 @@ export class MediaPackageOutputDestination implements IOutputPluginDest {
       console.error(err);
       throw new Error("uploadMediaPlaylist Failed:" + err);
     }
-    // return new Promise(async (resolve, reject) => {
-    //   console.log(`...\n...\n...I WANNA UPLOAD M3U8\n...\n`);
-    //   const uploader = this._fileUploader.bind(this);
-    //   try {
-    //     await uploader(opts);
-    //     console.log(`Manifest (${opts.fileName}) uploaded...`);
-    //   } catch (err) {
-    //     console.error(err);
-    //     reject(err);
-    //   }
-    //   resolve;
-    // });
   }
 
   async uploadMediaSegment(opts: any): Promise<boolean> {
     const uploader = this._fileUploader.bind(this);
-    let bool = false;
     const fetchAndUpload = async (segURI, fileName): Promise<boolean> => {
       return new Promise((resolve, reject) => {
         fetch(segURI)
@@ -164,32 +124,5 @@ export class MediaPackageOutputDestination implements IOutputPluginDest {
       console.error(err);
       throw new Error("uploadMediaSegment Failed:" + err);
     }
-    // return new Promise(async (resolve, reject) => {
-    //   const uploader = this._fileUploader.bind(this);
-    //   try {
-    //     const segURI = opts.segment_uri;
-    //     const fileName = opts.file_name;
-
-    //     console.log("About to Fetch->Upload, ", fileName);
-
-    //     fetch(segURI)
-    //       .then((res) => res.buffer())
-    //       .then(async (buffer) => {
-    //         const uploaderOptions = {
-    //           fileName: fileName,
-    //           fileData: buffer,
-    //         };
-    //         await uploader(uploaderOptions);
-    //         console.log("Segment uploaded...");
-    //       })
-    //       .catch((err) => {
-    //         throw new Error(err);
-    //       });
-    //   } catch (err) {
-    //     console.error(err);
-    //     reject(err);
-    //   }
-    //   resolve;
-    // });
   }
 }

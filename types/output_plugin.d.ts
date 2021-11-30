@@ -3,7 +3,6 @@ export interface IOutputPlugin {
 }
 
 export interface IOutputPluginDest {
-  generateMultiVariantPlaylist(manifest: string): string;
   _fileUploader(opts: any): Promise<boolean>;
   uploadMediaPlaylist(opts: any): Promise<boolean>;
   uploadMediaSegment(opts: any): Promise<boolean>;
