@@ -21,9 +21,7 @@ export class MediaPackageOutput implements IOutputPlugin {
         try {
           let validUrl = new URL(ingestUrl.url);
           if (!ingestUrl.username || !ingestUrl.password) {
-            throw new Error(
-              "Payload parameter 'ingestUrls' missing 'username' or 'password' fields"
-            );
+            throw new Error("Payload parameter 'ingestUrls' missing 'username' or 'password' fields");
           }
         } catch (err) {
           throw new Error("Payload parameter 'ingestUrls' contains an Invalid URL");
@@ -32,6 +30,10 @@ export class MediaPackageOutput implements IOutputPlugin {
     }
 
     return new MediaPackageOutputDestination(opts);
+  }
+
+  getDestinationJsonSchema() {
+    return {};
   }
 }
 
@@ -53,36 +55,42 @@ export class MediaPackageOutputDestination implements IOutputPluginDest {
   }
 
   async _fileUploader(opts: IFileUploaderOptions): Promise<boolean> {
+    let result;
     // For each client/ingestUrl
     for (let i = 0; i < this.webDAVClients.length; i++) {
       const client = this.webDAVClients[i];
       try {
         // Try Upload manifest
-        let bool = await client.putFileContents(opts.fileName, opts.fileData, {
+        result = await client.putFileContents(opts.fileName, opts.fileData, {
           overwrite: true,
         });
-        // FOR DEBUGGING 
+        // ***FOR DEBUGGING***
         if (typeof opts.fileData === "string") {
           console.log(opts.fileData);
         }
         console.log(
-          `Upload Success: ${bool}. webDAV PUT '${opts.fileName}' to MediaPackage with username: ${this.ingestUrls[i].username}`
+          `Upload Success: ${result}. webDAV client_${i + 1} PUT '${
+            opts.fileName
+          }' to MediaPackage with username: ${this.ingestUrls[i].username}`
         );
-        
-        return bool;
       } catch (e) {
-        console.error("(!): Problem Occured when putting files to destination", e);
+        console.error("(!) Problem Occured when putting files to destination:", e.message);
         throw new Error(e);
       }
     }
+
+    return result;
   }
 
   async uploadMediaPlaylist(opts: IFileUploaderOptions): Promise<boolean> {
     const uploader = this._fileUploader.bind(this);
     try {
-      console.log(`...\n...\n...I WANNA UPLOAD M3U8\n...\n`);
       let result = await uploader(opts);
-      console.log(`Manifest (${opts.fileName}) uploaded...`);
+      if (result) {
+        console.log(`Manifest (${opts.fileName}) uploaded...`);
+      } else {
+        console.log(`(!): Manifest (${opts.fileName}) Failed to upload!`);
+      }
       return result;
     } catch (err) {
       console.error(err);

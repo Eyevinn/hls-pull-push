@@ -69,6 +69,16 @@ Example S3:
 }
 ```
 
+## Limitations and Future Work
+- Currently, there are no operations in place to check if the request destination is already in use by another session. 
+Allowing for multiple sessions uploading to the same destination and overwriting each others files.
+
+- In MediaPackageOutput, no retry logic added yet for uploading.
+
+- Generally, when an upload job fails, an error will be thrown. Then the service will continue, assuming upload was successful. Playlist manifests should maybe exclude segments 
+that were not uploaded.
+
+
 # About Eyevinn Technology
 
 Eyevinn Technology is an independent consultant firm specialized in video and streaming. Independent in a way that we are not commercially tied to any platform or technology vendor.

@@ -1,8 +1,8 @@
 import fastify, { FastifyInstance, FastifyRequest } from "fastify";
-import { HLSRecorder } from "@eyevinn/hls-recorder";
 import { Schemas } from "../util/schemas";
 import { Session } from "../util/session";
 import { IOutputPlugin, IOutputPluginDest } from "../types/output_plugin";
+export { MediaPackageOutput } from "../output_plugins/mediapackage";
 
 export interface IDestPayload {
   destination: string;
@@ -19,15 +19,15 @@ interface IRequestBody {
   url: string;
   dest?: any;
 }
-const PLUGINS = {}
+const PLUGINS = {};
 export class HLSPullPush {
   private server: FastifyInstance;
   PLUGINS: Object;
   instanceId: number;
 
-  constructor() {
+  constructor(opts?) {
     const SESSIONS = {}; // in memory store
-    //this.PLUGINS = {};
+
     this.instanceId = 1;
 
     this.server = fastify({ ignoreTrailingSlash: true });
@@ -36,7 +36,7 @@ export class HLSPullPush {
       swagger: {
         info: {
           title: "Pull Push Service API",
-          description: "Service that pulls from HLS live stream and pushes to Media Package",
+          description: "Service that pulls from HLS live stream and pushes to Plugin Destination",
           version: "0.1.0",
         },
         tags: [{ name: "fetcher", description: "Fetcher related end-points" }],
@@ -57,7 +57,7 @@ export class HLSPullPush {
               !requestBody ||
               !requestBody.name ||
               !requestBody.url ||
-              !requestBody.plugin ||
+              !requestBody.output ||
               !requestBody.payload
             ) {
               reply.code(404).send("Missing request body keys");
@@ -65,36 +65,35 @@ export class HLSPullPush {
             // Check if string is valid url
             const url = new URL(requestBody.url);
             // Get Plugin from register if valid
-            const requestedPlugin: IOutputPlugin = _getPluginFor(requestBody.plugin);
+            const requestedPlugin: IOutputPlugin = _getPluginFor(requestBody.output);
             if (!requestedPlugin) {
-              reply.code(404).send(`Unsupported Plugin Type '${requestBody.plugin}'`);
+              reply.code(404).send({ message: `Unsupported Plugin Type '${requestBody.output}'` });
             }
             // Generate instance of plugin destination if valid
             let outputDest: IOutputPluginDest;
             try {
               outputDest = requestedPlugin.createOutputDestination(requestBody.payload);
             } catch (err) {
-              console.error(err)
+              console.error(err);
               reply.code(404).send(JSON.stringify(err));
             }
+
             // Create new session and add to local store
             const session = new Session({
               name: requestBody.name,
               url: url.href,
-              dest: outputDest,
-              concurrency: null,
+              plugin: outputDest,
+              dest: requestBody.output,
+              concurrency: requestBody.payload["concurrency"] ? requestBody.payload["concurrency"] : null,
+              windowSize: requestBody.payload["windowSize"] ? requestBody.payload["windowSize"] : null,
             });
             // Store Hls recorder in dictionary in-memory
             SESSIONS[session.sessionId] = session;
-            console.log(
-              "HLSPullPush instance's own SESSIONS:",
-              JSON.stringify(Object.keys(SESSIONS), null, 2)
-            );
 
             reply.code(200).send({
-              message: "Created an Fetcher and started pulling from HLS Live Stream",
+              message: "Created a Fetcher and started pulling from HLS Live Stream",
               fetcherId: session.sessionId,
-              requestData: requestBody,
+              requestData: request.body,
             });
           } catch (err) {
             reply.code(500).send(err.message);
@@ -108,9 +107,7 @@ export class HLSPullPush {
                 delete SESSIONS[sessionId];
               }
             });
-            let activeFetchersList = Object.keys(SESSIONS).map((sessionId) =>
-              SESSIONS[sessionId].toJSON()
-            );
+            let activeFetchersList = Object.keys(SESSIONS).map((sessionId) => SESSIONS[sessionId].toJSON());
             reply.code(200).send(activeFetchersList);
           } catch (err) {
             reply.code(500).send(err.message);
@@ -136,7 +133,7 @@ export class HLSPullPush {
                 await session.StopHLSRecorder();
               }
               // Delete Session from store
-              console.log("Deleting Recording Session from SessionStorage");
+              console.log(`Deleting Recording Session [ ${fetcherId} ] from SessionStorage`);
               delete SESSIONS[fetcherId];
 
               return reply.code(204).send({ message: "Deleted Fetcher Session" });
@@ -160,12 +157,12 @@ export class HLSPullPush {
       if (err) {
         throw err;
       }
-      console.log(`Server listening at ${address}`);
+      console.log(`HLSPullPush Service listening at ${address}`);
     });
   }
 }
 function _getPluginFor(name: string): IOutputPlugin {
-  console.log(`PLUGINS has [${Object.keys(PLUGINS)}], input arg is = ${name}`);
+  console.log(`Registered Plugins are: [${Object.keys(PLUGINS)}]. Request arg is '${name}'`);
   const result = PLUGINS[name];
   if (!result) {
     return null;
