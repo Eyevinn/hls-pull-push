@@ -15,6 +15,8 @@ const debug = require("debug")("hls-pull-push");
 //const { AwsUploadModule } = require("@eyevinn/iaf-plugin-aws-s3");
 //import { ListOriginEndpointsCommand } from "@aws-sdk/client-mediapackage";
 
+const LIVE_WINDOW_SIZE = 2 * 60; // 120 seconds
+
 export class Session {
   sessionId: string;
   created: string;
@@ -98,7 +100,7 @@ export class Session {
       if (data.type === PlaylistType.EVENT && !this.sourceIsEvent) {
         this.sourceIsEvent = true;
       } else if (data.type === PlaylistType.LIVE && this.targetWindowSize === -1) {
-        this.targetWindowSize = 2 * 60; // Default to 2 minutes if source HLS steam is type LIVE.
+        this.targetWindowSize = LIVE_WINDOW_SIZE; // Default to 2 minutes if source HLS steam is type LIVE.
       }
       // When stopped, either by 'StopHLSRecorder' or by Event content...
       // ...Session becomes inactive
@@ -115,58 +117,10 @@ export class Session {
           }`
         );
 
-        let BottomSegs: ISegments = {
-          video: {},
-          audio: {},
-          subtitle: {},
-        };
-        if (this.atFirstIncrement && data.type === PlaylistType.VOD) {
-          BottomSegs = Object.assign({}, data.allPlaylistSegments);
-        } else {
-          let latestSegmentIndex = this._getLatestSegmentIndex(this.collectedSegments);
-          BottomSegs = GetOnlyNewestSegments(data.allPlaylistSegments, latestSegmentIndex);
-        }
-        // TODO: What should hls-pull-push do if livestream is event and goes vod.
-        //
-        // Stop recorder if source became a VOD
-        if (data.type === PlaylistType.VOD) {
-          debug(`[${this.sessionId}]: Stopping HLSRecorder due to recording becoming a VOD`);
-          // this.recorder.PlaylistType = PlaylistType.VOD
-          await this.StopHLSRecorder();
-        }
-
-        // Add new editions to internal collection
-        this._PushSegments(this.collectedSegments, BottomSegs);
-
-        // Window Size & playlistData update
-        if (this.targetWindowSize !== -1) {
-          const segRemovalData = this._AdjustForWindowSize(this.collectedSegments);
-          debug(
-            `Current Window Size [ ${this.currentWindowSize} ]. Target Window Size [ ${this.targetWindowSize} ]`
-          );
-          this.m3uPlaylistData.mseq += segRemovalData.segmentsReleased;
-          debug(
-            `[${this.sessionId}]: Sessions internal m3u8 media-sequence count ${
-              segRemovalData.segmentsReleased === 0
-                ? "is unchanged"
-                : `now at: [ ${this.m3uPlaylistData.mseq} ]`
-            }`
-          );
-          if (segRemovalData.discontinuityTagsReleased !== 0) {
-            this.m3uPlaylistData.dseq += segRemovalData.discontinuityTagsReleased;
-            debug(
-              `[${this.sessionId}]: Recorders internal discontinuity-sequence count now at: [ ${this.m3uPlaylistData.dseq} ]`
-            );
-          }
-        }
-        this.m3uPlaylistData.targetDur = this._getTargetDuration(this.collectedSegments);
-
-        debug(`[${this.sessionId}]: Trying to Push all new hlsrecorder segments to Output`);
-
-        // Upload Master If not already done...
+        // [ Upload Master ] If not already done...
         if (!this.masterM3U8) {
           try {
-            console.log("Try upload multivariant manifest...");
+            debug(`[${this.sessionId}]: Trying to upload multivariant manifest...`);
             this.masterM3U8 = this.hlsrecorder.masterManifest.replace(/master/g, "channel_");
             let result = await this.outputDestination.uploadMediaPlaylist({
               fileName: "channel.m3u8",
@@ -180,24 +134,82 @@ export class Session {
             }
           } catch (error) {
             console.error("Issue with webDAV", error);
-            throw new Error(error);
           }
         }
+
+        // TODO: What should hls-pull-push do if livestream is event and goes vod.
+        //
+        // Stop recorder if source became a VOD
+        if (data.type === PlaylistType.VOD) {
+          debug(`[${this.sessionId}]: Stopping HLSRecorder due to recording becoming a VOD`);
+          // this.recorder.PlaylistType = PlaylistType.VOD
+          await this.StopHLSRecorder();
+        }
+        // Get only the newest segment items
+        let BottomSegs: ISegments = {
+          video: {},
+          audio: {},
+          subtitle: {},
+        };
+        if (this.atFirstIncrement && data.type === PlaylistType.VOD) {
+          BottomSegs = Object.assign({}, data.allPlaylistSegments);
+        } else {
+          let latestSegmentIndex = this._getLatestSegmentIndex(this.collectedSegments);
+          BottomSegs = GetOnlyNewestSegments(data.allPlaylistSegments, latestSegmentIndex);
+        }
+
+        // [ Upload Segments ]: all newest segments to S3 Bucket
         let SegmentsWithNewURL: ISegments;
         let tasksSegments: any[];
         try {
-          // Upload all newest segments to S3 Bucket
           tasksSegments = await this._UploadAllSegments(this.segQueue, BottomSegs);
-          // Make Segment Urls formatted and ready for Manifest Generation
-          SegmentsWithNewURL = ReplaceSegmentURLs(this.collectedSegments);
           // Let the Workers Work!
           const resultsSegments = [];
           for (let result of tasksSegments) {
             resultsSegments.push(await result);
           }
+          const failedUploadsIndexes = [];
+          resultsSegments.map((result, index) => {
+            if (!result) {
+              failedUploadsIndexes.push(index);
+            }
+          });
+          if (failedUploadsIndexes.length > 0) {
+            this._RemoveUnreachableSegments(failedUploadsIndexes, BottomSegs);
+          }
           debug(`[${this.sessionId}]: Finished uploading all segments!`);
 
+          // Add new uploaded editions to internal collection
+          this._PushSegments(this.collectedSegments, BottomSegs);
+
+          // Window Size & playlistData update
+          if (this.targetWindowSize !== -1) {
+            const segRemovalData = this._AdjustForWindowSize(this.collectedSegments);
+            debug(
+              `[${this.sessionId}]: Current Window Size [ ${this.currentWindowSize} ]. Target Window Size [ ${this.targetWindowSize} ]`
+            );
+            this.m3uPlaylistData.mseq += segRemovalData.segmentsReleased;
+            debug(
+              `[${this.sessionId}]: Sessions internal m3u8 media-sequence count ${
+                segRemovalData.segmentsReleased === 0
+                  ? "is unchanged"
+                  : `now at: [ ${this.m3uPlaylistData.mseq} ]`
+              }`
+            );
+            if (segRemovalData.discontinuityTagsReleased !== 0) {
+              this.m3uPlaylistData.dseq += segRemovalData.discontinuityTagsReleased;
+              debug(
+                `[${this.sessionId}]: Recorders internal discontinuity-sequence count now at: [ ${this.m3uPlaylistData.dseq} ]`
+              );
+            }
+          }
+          this.m3uPlaylistData.targetDur = this._getTargetDuration(this.collectedSegments);
+
+          debug(`[${this.sessionId}]: Trying to Push all new hlsrecorder segments to Output`);
+
           if (this.atFirstIncrement || this.sourceIsEvent || this.active) {
+            // Make Segment Urls formatted and ready for Manifest Generation
+            SegmentsWithNewURL = ReplaceSegmentURLs(this.collectedSegments);
             // Upload Recording Playlist Manifest to S3 Bucket
             let tasksManifest = await this._UploadAllManifest(
               this.m3u8Queue,
@@ -252,6 +264,48 @@ export class Session {
 
   /** PRIVATE FUNCTUIONS */
 
+  _RemoveUnreachableSegments = (failedIndexes, Segments) => {
+    for (let i = 0; i < failedIndexes.length; i++) {
+      const bandwidths = Object.keys(Segments["video"]);
+      const audioGroups = Object.keys(Segments["audio"]);
+      const subtitleGroups = Object.keys(Segments["subtitle"]);
+
+      const failedIndex = failedIndexes[i];
+      if (failedIndex > -1) {
+        // Remove from Video List
+        bandwidths.forEach((bw) => {
+          if (Segments["video"][bw].segList[failedIndex + 1]) {
+            // eslint-disable-next-line standard/computed-property-even-spacing
+            Segments["video"][bw].segList[failedIndex + 1].discontinuity = true;
+          }
+          Segments["video"][bw].segList.splice(failedIndex, 1);
+        });
+        // Remove from Audio List
+        audioGroups.forEach((group) => {
+          const langs = Object.keys(Segments["audio"][group]);
+          langs.forEach((lang) => {
+            if (Segments["audio"][group][lang].segList[failedIndex + 1]) {
+              // eslint-disable-next-line standard/computed-property-even-spacing
+              Segments["audio"][group][lang].segList[failedIndex + 1].discontinuity = true;
+            }
+            Segments["audio"][group][lang].segList.splice(failedIndex, 1);
+          });
+        });
+        // Remove from Subtitle List
+        subtitleGroups.forEach((group) => {
+          const langs = Object.keys(Segments["subtitle"][group]);
+          langs.forEach((lang) => {
+            if (Segments["subtitle"][group][lang].segList[failedIndex + 1]) {
+              // eslint-disable-next-line standard/computed-property-even-spacing
+              Segments["subtitle"][group][lang].segList[failedIndex + 1].discontinuity = true;
+            }
+            Segments["subtitle"][group][lang].segList.splice(failedIndex, 1);
+          });
+        });
+      }
+    }
+  };
+
   _getLatestSegmentIndex(segments: ISegments): number {
     let endIndex: number;
     if (Object.keys(segments["video"]).length > 0) {
@@ -282,7 +336,6 @@ export class Session {
             segment_uri: segmentUri,
             file_name: segmentFileName,
           };
-          console.log("pushed a Segment Upload Task");
           tasks.push(taskQueue.push(item));
         }
       });
@@ -364,6 +417,12 @@ export class Session {
           fileName: name,
           fileData: playlistToBeUploaded,
         };
+
+        // For Debugging
+        if (bw === bandwidths[0]) {
+          debug(playlistToBeUploaded);
+        }
+
         tasks.push(taskQueue.push(item));
       });
     });
@@ -460,7 +519,7 @@ export class Session {
               segInfo = `other hls tag`;
             }
             debug(
-              `[${this.sessionId}]: Added Segments(${segInfo}) to Cache-HLS Playlist_${bw}\n${newVideoSegment.uri}`
+              `[${this.sessionId}]: Added Segments(${segInfo}) to Cache-HLS Playlist_${bw}\nseg_uri=${newVideoSegment.uri}`
             );
 
             // Update Session's current window size based on segment duration.
