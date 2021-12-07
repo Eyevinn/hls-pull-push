@@ -117,27 +117,28 @@ export class Session {
           try {
             debug(`[${this.sessionId}]: Trying to upload multivariant manifest...`);
             this.masterM3U8 = this.hlsrecorder.masterManifest.replace(/master/g, "channel_");
-            let result = await this.outputDestination.uploadMediaPlaylist({
-              fileName: "channel.m3u8",
-              fileData: this.masterM3U8,
-            });
-            if (result) {
-              debug(`[${this.sessionId}]: MultiVariant Manifest sent to Output`);
+            if (this.masterM3U8 !== "") {
+              let result = await this.outputDestination.uploadMediaPlaylist({
+                fileName: "channel.m3u8",
+                fileData: this.masterM3U8,
+              });
+              if (result) {
+                debug(`[${this.sessionId}]: MultiVariant Manifest sent to Output`);
+              } else {
+                debug(`[${this.sessionId}]: (!) Sending MultiVariant Manifest to Output Failed`);
+                this.masterM3U8 = null;
+              }
             } else {
-              debug(`[${this.sessionId}]: (!) Sending MultiVariant Manifest to Output Failed`);
-              this.masterM3U8 = null;
+              debug(`[${this.sessionId}]: No multivariant manifest to be uploaded...`);
             }
           } catch (error) {
             console.error("Issue with webDAV", error);
           }
         }
 
-        // TODO: What should hls-pull-push do if livestream is event and goes vod.
-        //
         // Stop recorder if source became a VOD
         if (data.type === PlaylistType.VOD) {
           debug(`[${this.sessionId}]: Stopping HLSRecorder due to recording becoming a VOD`);
-          // this.recorder.PlaylistType = PlaylistType.VOD
           await this.StopHLSRecorder();
         }
         // Get only the newest segment items
@@ -209,7 +210,8 @@ export class Session {
             let tasksManifest = await this._UploadAllManifest(
               this.m3u8Queue,
               SegmentsWithNewURL,
-              this.m3uPlaylistData
+              this.m3uPlaylistData,
+              this.masterM3U8 !== ""
             );
             // Let the Workers Work!
             const resultsManifest = [];
@@ -255,7 +257,7 @@ export class Session {
       dest: this.destination,
       concurrency: this.concurrentWorkers,
       windowSize: this.targetWindowSize,
-      sourcePlaylistType: this._getSourcePlaylistType()
+      sourcePlaylistType: this._getSourcePlaylistType(),
     };
   }
 
@@ -411,7 +413,8 @@ export class Session {
   async _UploadAllManifest(
     taskQueue: any,
     segments: ISegments,
-    m3uPlaylistData: { mseq: number; dseq: number; targetDur: number }
+    m3uPlaylistData: { mseq: number; dseq: number; targetDur: number },
+    multiVariantExists: boolean
   ): Promise<any[]> {
     const tasks = [];
     const bandwidths = Object.keys(segments["video"]);
@@ -427,7 +430,12 @@ export class Session {
       };
       GenerateMediaM3U8(parseInt(bw), generatorOptions).then((playlistM3u8: string) => {
         const playlistToBeUploaded: string = playlistM3u8.replace(/master/g, "channel");
-        const name = `channel_${bw}.m3u8`;
+        let name;
+        if (multiVariantExists) {
+          name = `channel_${bw}.m3u8`;
+        } else {
+          name = "channel.m3u8";
+        }
         let item = {
           fileName: name,
           fileData: playlistToBeUploaded,
