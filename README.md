@@ -72,6 +72,9 @@ Example S3:
   }
 }
 ```
+## Prerequisites
+- nodejs >= 12.0.0
+- In case of using the `MediaPackageOutput` plugin, you need to have an aws mediapackage channel set up expecting HLS as input.
 ## Debugging
 The service uses the debugging utility `debug`. To see relavant logs from the service, run with env `DEBUG` set to `hls-*`. 
 
