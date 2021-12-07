@@ -35,6 +35,7 @@ export const Schemas = (name: string, schemaList?: any) => {
             anyOf: schemaList,
           },
         },
+        required: ["name", "url", "output", "payload"],
       },
       response: {
         200: {
@@ -47,8 +48,9 @@ export const Schemas = (name: string, schemaList?: any) => {
               properties: {
                 name: { type: "string" },
                 url: { type: "string" },
-                dest: { type: "string" },
+                output: { type: "string" },
               },
+              additionalProperties: true,
             },
           },
           example: {
@@ -82,16 +84,20 @@ export const Schemas = (name: string, schemaList?: any) => {
               created: { type: "string", description: "Creation date" },
               name: { type: "string", description: "Name of Session" },
               url: { type: "string", description: " Reachable url to HLS" },
-              dest: { type: "string", description: "gonna be some other type later" },
+              dest: { type: "string", description: "Name of output plugin" },
               concurrency: { type: "number", description: "Number of maximum concurrent workers" },
+              windowSize: { type: "number", description: "Number is seconds, set output media playlist window size" },
+              sourcePlaylistType: { type: "string", description: "Source HLS Playlist Type, VOD | LIVE | EVENT | NONE" },
             },
             example: {
               fetcherId: "111310a5-3d46-4c94-a1fa-8c00164e9774",
               created: "2021-11-13T13:08:52.454Z",
               name: "The First Fetcher",
               url: "https://cph-p2p-msl.akamaized.net/hls/live/2000341/test/master.m3u8",
-              dest: "TBD",
+              dest: "mediapackage",
               concurrency: 8,
+              windowSize: 120,
+              sourcePlaylistType: "LIVE"
             },
           },
         },
@@ -110,7 +116,7 @@ export const Schemas = (name: string, schemaList?: any) => {
       },
       response: {
         204: {},
-        404: BadRequestSchema("Fetcher with specifed ID was not found."),
+        404: BadRequestSchema("Fetcher with ID: '886008d7-e53a-4cab-a108-323b88352afd' was not found"),
       },
     };
   }

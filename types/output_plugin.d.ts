@@ -1,6 +1,6 @@
 export interface IOutputPlugin {
   createOutputDestination(opts: any);
-  getDestinationJsonSchema();
+  getPayloadSchema();
 }
 
 export type Logger = (logMessage: string) => void;

@@ -14,12 +14,12 @@ export interface IDestPayload {
 export class HLSPullPush {
   private server: FastifyInstance;
   PLUGINS: Object;
-  SCHEMAS: any[];
+  PAYLOAD_SCHEMAS: any[];
 
   constructor() {
     const SESSIONS = {}; // in memory store
     this.PLUGINS = {};
-    this.SCHEMAS = [];
+    this.PAYLOAD_SCHEMAS = [];
 
     this.server = fastify({ ignoreTrailingSlash: true });
     this.server.register(require("fastify-swagger"), {
@@ -42,7 +42,7 @@ export class HLSPullPush {
     const apiFetcher = function (fastify, opts, done) {
       fastify.post(
         "/fetcher",
-        { schema: Schemas("POST/fetcher", opts.instance.SCHEMAS) },
+        { schema: Schemas("POST/fetcher", opts.instance.PAYLOAD_SCHEMAS) },
         async (request, reply) => {
           try {
             //console.log(`[${this.instanceId}]: I got a POST request`);
@@ -78,11 +78,12 @@ export class HLSPullPush {
               url: url.href,
               plugin: outputDest,
               dest: requestBody.output,
-              concurrency: requestBody.payload["concurrency"] ? requestBody.payload["concurrency"] : null,
-              windowSize: requestBody.payload["windowSize"] ? requestBody.payload["windowSize"] : null,
+              concurrency: requestBody["concurrency"] ? requestBody["concurrency"] : null,
+              windowSize: requestBody["windowSize"] ? requestBody["windowSize"] : null,
             });
             // Store Hls recorder in dictionary in-memory
             SESSIONS[session.sessionId] = session;
+            console.log(`New Fetcher Session Created, id:[${session.sessionId}]`);
 
             reply.code(200).send({
               message: "Created a Fetcher and started pulling from HLS Live Stream",
@@ -117,9 +118,9 @@ export class HLSPullPush {
           try {
             let session = SESSIONS[fetcherId];
             if (!session) {
-              console.log("Nothing cached under specified cache id: " + fetcherId);
+              console.log("Nothing found under specified fetcher id: " + fetcherId);
               return reply.code(404).send({
-                message: `Recorder with Cache ID: '${fetcherId}' was not found`,
+                message: `Fetcher with ID: '${fetcherId}' was not found`,
               });
             }
             console.log("SESSION:", session.toJSON());
@@ -128,7 +129,7 @@ export class HLSPullPush {
               await session.StopHLSRecorder();
             }
             // Delete Session from store
-            console.log(`Deleting Recording Session [ ${fetcherId} ] from SessionStorage`);
+            console.log(`Deleting Fetcher Session [ ${fetcherId} ] from Session Storage`);
             delete SESSIONS[fetcherId];
 
             return reply.code(204).send({ message: "Deleted Fetcher Session" });
@@ -146,8 +147,8 @@ export class HLSPullPush {
     if (!this.PLUGINS[name]) {
       this.PLUGINS[name] = plugin;
     }
-    let pluginPayloadSchema: any = plugin.getDestinationJsonSchema();
-    this.SCHEMAS.push(pluginPayloadSchema);
+    let pluginPayloadSchema: any = plugin.getPayloadSchema();
+    this.PAYLOAD_SCHEMAS.push(pluginPayloadSchema);
   }
 
   listen(port) {

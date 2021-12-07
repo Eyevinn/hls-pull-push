@@ -3,6 +3,7 @@ import { AuthType, createClient, WebDAVClient } from "webdav";
 import winston from "winston";
 const debug = require("debug")("hls-pull-push-mediapackage");
 const fetch = require("node-fetch");
+const { AbortController } = require("abort-controller");
 
 const FAIL_TIMEOUT = 5 * 1000;
 const MAX_RETIES = 3;
@@ -39,7 +40,7 @@ export class MediaPackageOutput implements IOutputPlugin {
     return new MediaPackageOutputDestination(opts);
   }
 
-  getDestinationJsonSchema() {
+  getPayloadSchema() {
     const payloadSchema = {
       type: "object",
       description: "Neccessary configuration data associated with chosen Output Plugin type",
@@ -48,7 +49,6 @@ export class MediaPackageOutput implements IOutputPlugin {
           description: "On success returns an array of active pull-push sessions",
           type: "array",
           items: {
-            additionlProperties: true,
             type: "object",
             properties: {
               url: { type: "string", description: "url to ingest endpoint" },

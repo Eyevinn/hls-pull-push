@@ -1,5 +1,4 @@
 import uuid from "uuid/v4";
-// import { promise as fastq } from "fastq";
 import { HLSRecorder, ISegments, PlaylistType, Segment } from "@eyevinn/hls-recorder";
 import { promise as fastq } from "fastq";
 import { GetOnlyNewestSegments, ReplaceSegmentURLs } from "../util/handleSegments";
@@ -10,10 +9,6 @@ import {
 } from "@eyevinn/hls-recorder/dist/util/manifest_generator";
 import { IOutputPluginDest } from "../types/output_plugin";
 const debug = require("debug")("hls-pull-push");
-
-//require("dotenv").config();
-//const { AwsUploadModule } = require("@eyevinn/iaf-plugin-aws-s3");
-//import { ListOriginEndpointsCommand } from "@aws-sdk/client-mediapackage";
 
 const LIVE_WINDOW_SIZE = 2 * 60; // 120 seconds
 
@@ -259,10 +254,30 @@ export class Session {
       url: this.sourceURL,
       dest: this.destination,
       concurrency: this.concurrentWorkers,
+      windowSize: this.targetWindowSize,
+      sourcePlaylistType: this._getSourcePlaylistType()
     };
   }
 
   /** PRIVATE FUNCTUIONS */
+
+  _getSourcePlaylistType() {
+    if (this.hlsrecorder) {
+      let typeEnum = this.hlsrecorder.sourcePlaylistType;
+      switch (typeEnum) {
+        case PlaylistType.LIVE:
+          return "LIVE";
+        case PlaylistType.EVENT:
+          return "EVENT";
+        case PlaylistType.VOD:
+          return "VOD";
+        default:
+          return "NONE";
+      }
+    } else {
+      return "NONE";
+    }
+  }
 
   _RemoveUnreachableSegments = (failedIndexes, Segments) => {
     for (let i = 0; i < failedIndexes.length; i++) {
