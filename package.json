@@ -11,6 +11,10 @@
   },
   "author": "Eyevinn Technology <work@eyevinn.se>",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Eyevinn/hls-pull-push.git"
+  },
   "devDependencies": {
     "@types/node": "^16.11.6",
     "typescript": "^4.4.4"
