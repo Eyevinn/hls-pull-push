@@ -1,4 +1,4 @@
-import { HLSPullPush, MediaPackageOutput } from "./src/index";
+import { HLSPullPush, MediaPackageOutput } from "./index";
 
 
 const pullPushService = new HLSPullPush();
