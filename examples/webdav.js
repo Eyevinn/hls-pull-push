@@ -1,13 +1,9 @@
 // Pull HLS and push to a WebDAV destination
 
-const { HLSPullPush, WebDAV } = require("../dist/index.js");
+const { HLSPullPush, MediaPackageOutput } = require("../dist/index.js");
 
-const destPlugin = new WebDAV({
-  destination: "webdav://destination",
-  username: USERNAME,
-  password: PASSWORD
-});
-const pullPushService = new HLSPullPush({
-  dest: destPlugin
-});
+const pullPushService = new HLSPullPush();
+pullPushService.registerPlugin("mediapackage", new MediaPackageOutput());
+
+console.log("Running");
 pullPushService.listen(process.env.PORT || 8080);
