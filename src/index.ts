@@ -149,6 +149,7 @@ export class HLSPullPush {
     }
     let pluginPayloadSchema: any = plugin.getPayloadSchema();
     this.PAYLOAD_SCHEMAS.push(pluginPayloadSchema);
+    console.log(`Registered output plugin '${name}'`);
   }
 
   listen(port) {
