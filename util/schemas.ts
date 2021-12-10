@@ -1,3 +1,5 @@
+import { IOutputPlugin } from "../types/output_plugin";
+
 const BadRequestSchema = (exampleMsg) => ({
   description: "Bad request error description",
   type: "object",
@@ -12,10 +14,15 @@ const BadRequestSchema = (exampleMsg) => ({
   },
 });
 
-export const Schemas = (name: string, schemaList?: any) => {
+export const Schemas = (name: string, plugins: IOutputPlugin[]) => {
+  let schemaList = [];
+  plugins.map(plugin => {
+    schemaList.push(plugin.getPayloadSchema());
+  });
+
   if (name === "POST/fetcher") {
     return {
-      description: "Creates and initializes a fetcher that pulls HLS live stream and pushes to Mediapackage",
+      description: "Creates and initializes a fetcher that pulls HLS live stream and pushes to a destination",
       tags: ["fetcher"],
       body: {
         type: "object",
@@ -32,7 +39,7 @@ export const Schemas = (name: string, schemaList?: any) => {
             example: "mediapackage",
           },
           payload: {
-            anyOf: schemaList,
+            oneOf: schemaList,
           },
         },
         required: ["name", "url", "output", "payload"],
