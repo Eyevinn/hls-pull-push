@@ -167,7 +167,6 @@ export class MediaPackageOutputDestination implements IOutputPluginDest {
             await timer(RETRY_DELAY);
           }
         } catch (err) {
-          clearTimeout(timeout);
           console.error(err);
           return false;
         } finally {
