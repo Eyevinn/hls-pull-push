@@ -30,7 +30,7 @@ export default function (fastify: FastifyInstance, opts, done) {
         // Generate instance of plugin destination if valid
         let outputDest: IOutputPluginDest;
         try {
-          outputDest = requestedPlugin.createOutputDestination(requestBody.payload);
+          outputDest = requestedPlugin.createOutputDestination(requestBody.payload, opts.instance.getLogger());
         } catch (err) {
           console.error(err);
           reply.code(404).send(JSON.stringify(err));

@@ -1,6 +1,7 @@
 import fastify, { FastifyInstance } from "fastify";
 import { Session } from "../util/session";
 import { IOutputPlugin, IOutputPluginDest } from "../types/output_plugin";
+import { AbstractLogger, ILogger } from "./logger";
 import uuid from "uuid/v4";
 export { MediaPackageOutput } from "../output_plugins/mediapackage";
 
@@ -16,10 +17,12 @@ export class HLSPullPush {
   private server: FastifyInstance;
   private PLUGINS: {[name: string]: IOutputPlugin};
   private SESSIONS: {[sessionId: string]: Session};
+  private logger: ILogger;
 
-  constructor() {
+  constructor(logger?: ILogger) {
     this.SESSIONS = {}; // in memory store
     this.PLUGINS = {};
+    this.logger = logger || new AbstractLogger();
 
     this.server = fastify({ ignoreTrailingSlash: true });
     this.server.register(require("fastify-swagger"), {
@@ -62,20 +65,19 @@ export class HLSPullPush {
     // Store Hls recorder in dictionary in-memory
     this.SESSIONS[session.sessionId] = session;
 
-    console.log(`New Fetcher Session Created, id:[${session.sessionId}]`);
+    this.logger.info(`New Fetcher Session Created, id:[${session.sessionId}]`);
     return session.sessionId;
   }
 
   async stopFetcher(fetcherId: string) {
     let session = this.SESSIONS[fetcherId];
-    console.log("SESSION:", session.toJSON());
 
     // Stop recording
     if (session.isActive()) {
       await session.StopHLSRecorder();
     }
     // Delete Session from store
-    console.log(`Deleting Fetcher Session [ ${fetcherId} ] from Session Storage`);
+    this.logger.info(`Deleting Fetcher Session [ ${fetcherId} ] from Session Storage`);
     delete this.SESSIONS[fetcherId];
   }
   
@@ -97,14 +99,14 @@ export class HLSPullPush {
     if (!this.PLUGINS[name]) {
       this.PLUGINS[name] = plugin;
     }
-    console.log(`Registered output plugin '${name}'`);
+    this.logger.info(`Registered output plugin '${name}'`);
   }
 
   getPluginFor(name: string): IOutputPlugin {
     try {
       const result = this.PLUGINS[name];
       if (!result) {
-        console.log(
+        this.logger.info(
           `Requested Plugin:'${name}' Not Found Amongst Registered Plugins: [${Object.keys(this.PLUGINS)}]`
         );
         return null;
@@ -119,13 +121,17 @@ export class HLSPullPush {
     return Object.keys(this.PLUGINS).map(name => this.PLUGINS[name]);
   }
 
+  getLogger(): ILogger {
+    return this.logger;
+  }
+
   listen(port) {
     this.server.register(api, { instance: this, prefix: "/api/v1" });
     this.server.listen(port, "0.0.0.0", (err, address) => {
       if (err) {
         throw err;
       }
-      console.log(`HLSPullPush Service listening at ${address}`);
+      this.logger.info(`HLSPullPush Service listening at ${address}`);
     });
   }
 }

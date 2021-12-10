@@ -1,9 +1,9 @@
+import { ILogger } from "../src/logger";
+
 export interface IOutputPlugin {
-  createOutputDestination(opts: any);
+  createOutputDestination(opts: any, logger: ILogger);
   getPayloadSchema();
 }
-
-export type Logger = (logMessage: string) => void;
 
 export interface ILocalFileUpload {
   fileName: string;
@@ -15,7 +15,6 @@ export interface IRemoteFileUpload extends ILocalFileUpload {
 }
 
 export interface IOutputPluginDest {
-  logger: Logger;
   uploadMediaPlaylist(opts: ILocalFileUpload): Promise<boolean>;
   uploadMediaSegment(opts: IRemoteFileUpload): Promise<boolean>;
 }
