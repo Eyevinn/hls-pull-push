@@ -14,7 +14,7 @@ export interface IDestPayload {
 
 export class HLSPullPush {
   private server: FastifyInstance;
-  private PLUGINS: Object;
+  private PLUGINS: {[name: string]: IOutputPlugin};
   private SESSIONS: {[sessionId: string]: Session};
 
   constructor() {
