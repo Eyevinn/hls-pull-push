@@ -212,18 +212,3 @@ export class HLSPullPush {
     });
   }
 }
-
-function GetPluginFor(instance: any, name: string): IOutputPlugin {
-  try {
-    const result = instance.PLUGINS[name];
-    if (!result) {
-      console.log(
-        `Requested Plugin:'${name}' Not Found Amongst Registered Plugins: [${Object.keys(instance.PLUGINS)}]`
-      );
-      return null;
-    }
-    return result;
-  } catch (err) {
-    console.error(err);
-  }
-}
