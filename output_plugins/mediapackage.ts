@@ -1,11 +1,12 @@
 import { IOutputPlugin, IOutputPluginDest } from "../types/output_plugin";
 import { AuthType, createClient, WebDAVClient } from "webdav";
-import winston from "winston";
-const debug = require("debug")("hls-pull-push-mediapackage");
-const fetch = require("node-fetch");
+import fetch from "node-fetch";
+import Debug from "debug";
+
+const debug = Debug("hls-pull-push-mediapackage");
 const { AbortController } = require("abort-controller");
 
-const FAIL_TIMEOUT = 5 * 1000;
+const DEFAULT_FAIL_TIMEOUT = 5 * 1000;
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 1 * 1000;
 const timer = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -18,6 +19,7 @@ interface IMediaPackageIngestUrl {
 
 export interface IMediaPackageOutputOptions {
   ingestUrls: IMediaPackageIngestUrl[];
+  timeoutMs?: number;
 }
 
 export interface IFileUploaderOptions {
@@ -26,7 +28,7 @@ export interface IFileUploaderOptions {
 }
 
 export class MediaPackageOutput implements IOutputPlugin {
-  createOutputDestination(opts: IMediaPackageOutputOptions) {
+  createOutputDestination(opts: IMediaPackageOutputOptions): IOutputPluginDest {
     // verify opts
     if (!opts.ingestUrls) {
       throw new Error("Payload Missing 'ingestUrls' parameter");
@@ -69,6 +71,10 @@ export class MediaPackageOutput implements IOutputPlugin {
             required: ["url", "username", "password"],
           },
         },
+        timeoutMs: {
+          description: "Timeout for fetching source segments",
+          type: "number",
+        },
       },
       required: ["ingestUrls"],
     };
@@ -78,6 +84,7 @@ export class MediaPackageOutput implements IOutputPlugin {
 
 export class MediaPackageOutputDestination implements IOutputPluginDest {
   private ingestUrls: IMediaPackageIngestUrl[];
+  private failTimeoutMs: number;
   webDAVClients: WebDAVClient[];
 
   constructor(opts: IMediaPackageOutputOptions) {
@@ -91,6 +98,7 @@ export class MediaPackageOutputDestination implements IOutputPluginDest {
       });
       this.webDAVClients.push(client);
     });
+    this.failTimeoutMs = opts.timeoutMs ? opts.timeoutMs : DEFAULT_FAIL_TIMEOUT;
   }
 
   private async _fileUploader(opts: IFileUploaderOptions): Promise<boolean> {
@@ -125,14 +133,55 @@ export class MediaPackageOutputDestination implements IOutputPluginDest {
     return result;
   }
 
+  private async _fetchAndUpload(segURI: string, fileName: string, failTimeoutMs: number): Promise<boolean> {
+    let retryCount = 0;
+    while (retryCount < MAX_RETRIES) {
+      retryCount++;
+      const controller = new AbortController();
+      const timeout = setTimeout(() => {
+        controller.abort();
+      }, failTimeoutMs);
+      try {
+        const response = await fetch(segURI, { signal: controller.signal });
+        if (response.status >= 200 && response.status < 300) {
+          let buffer = await response.buffer();
+          const uploaderOptions = {
+            fileName: fileName,
+            fileData: buffer,
+          };
+          clearTimeout(timeout);
+          let result = await this._fileUploader(uploaderOptions);
+          return result;
+        } else {
+          console.error(
+            `Segment Unreachable! at ${segURI}. Returned code: ${response.status}. Retries left: [${
+              MAX_RETRIES - retryCount + 1
+            }]`
+          );
+          await timer(RETRY_DELAY);
+        }
+      } catch (err) {
+        if (err.type === "aborted") {
+          console.error(`Request Timeout for fetching (${failTimeoutMs}ms) ${segURI} (${retryCount})`);
+        } else {
+          console.error(err);
+        }
+        return false;
+      } finally {
+        clearTimeout(timeout);
+      }
+    }
+    console.error(`Segment: '${fileName}' Upload Failed!`);
+    return false;
+  }
+
   logger(logMessage: string) {
     debug(logMessage);
   }
 
   async uploadMediaPlaylist(opts: IFileUploaderOptions): Promise<boolean> {
-    const uploader = this._fileUploader.bind(this);
     try {
-      let result = await uploader(opts);
+      let result = await this._fileUploader(opts);
       if (!result) {
         this.logger(`[!]: Manifest (${opts.fileName}) Failed to upload!`);
       }
@@ -144,50 +193,12 @@ export class MediaPackageOutputDestination implements IOutputPluginDest {
   }
 
   async uploadMediaSegment(opts: any): Promise<boolean> {
-    const uploader = this._fileUploader.bind(this);
-    const fetchAndUpload = async (segURI, fileName): Promise<boolean> => {
-      let RETRY_COUNT = 0;
-      while (RETRY_COUNT < MAX_RETRIES) {
-        RETRY_COUNT++;
-        const controller = new AbortController();
-        const timeout = setTimeout(() => {
-          console.error(`Request Timeout for ${segURI}`);
-          controller.abort();
-        }, FAIL_TIMEOUT);
-        try {
-          const response = await fetch(segURI, { signal: controller.signal });
-          if (response.status >= 200 && response.status < 300) {
-            let buffer = await response.buffer();
-            const uploaderOptions = {
-              fileName: fileName,
-              fileData: buffer,
-            };
-            let result = await uploader(uploaderOptions);
-            return result;
-          } else {
-            console.error(
-              `Segment Unreachable! at ${segURI}. Returned code: ${response.status}. Retries left: [${
-                MAX_RETRIES - RETRY_COUNT + 1
-              }]`
-            );
-            await timer(RETRY_DELAY);
-          }
-        } catch (err) {
-          console.error(err);
-          return false;
-        } finally {
-          clearTimeout(timeout);
-        }
-      }
-      console.error(`Segment: '${fileName}' Upload Failed!`);
-      return false;
-    };
     try {
       const segURI = opts.segment_uri;
       const fileName = opts.file_name;
       let result = false;
       this.logger(`Going to Fetch->${segURI}, and Upload as->${fileName}`);
-      result = await fetchAndUpload(segURI, fileName);
+      result = await this._fetchAndUpload(segURI, fileName, this.failTimeoutMs);
       return result;
     } catch (err) {
       console.error(err);
