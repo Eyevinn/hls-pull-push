@@ -6,7 +6,7 @@ const fetch = require("node-fetch");
 const { AbortController } = require("abort-controller");
 
 const FAIL_TIMEOUT = 5 * 1000;
-const MAX_RETIES = 3;
+const MAX_RETRIES = 3;
 const RETRY_DELAY = 1 * 1000;
 const timer = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -141,7 +141,7 @@ export class MediaPackageOutputDestination implements IOutputPluginDest {
     const uploader = this._fileUploader.bind(this);
     const fetchAndUpload = async (segURI, fileName): Promise<boolean> => {
       let RETRY_COUNT = 0;
-      while (RETRY_COUNT < MAX_RETIES) {
+      while (RETRY_COUNT < MAX_RETRIES) {
         RETRY_COUNT++;
         const controller = new AbortController();
         const timeout = setTimeout(() => {
@@ -161,12 +161,13 @@ export class MediaPackageOutputDestination implements IOutputPluginDest {
           } else {
             console.error(
               `Segment Unreachable! at ${segURI}. Returned code: ${response.status}. Retries left: [${
-                MAX_RETIES - RETRY_COUNT + 1
+                MAX_RETRIES - RETRY_COUNT + 1
               }]`
             );
             await timer(RETRY_DELAY);
           }
         } catch (err) {
+          clearTimeout(timeout);
           console.error(err);
           return false;
         } finally {
