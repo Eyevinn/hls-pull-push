@@ -6,12 +6,18 @@ const fetch = require("node-fetch");
 const { AbortController } = require("abort-controller");
 
 const FAIL_TIMEOUT = 5 * 1000;
-const MAX_RETIES = 3;
+const MAX_RETRIES = 3;
 const RETRY_DELAY = 1 * 1000;
 const timer = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+interface IMediaPackageIngestUrl {
+  url: string;
+  username: string;
+  password: string;
+}
+
 export interface IMediaPackageOutputOptions {
-  ingestUrls: { url: string; username: string; password: string }[];
+  ingestUrls: IMediaPackageIngestUrl[];
 }
 
 export interface IFileUploaderOptions {
@@ -43,7 +49,7 @@ export class MediaPackageOutput implements IOutputPlugin {
   getPayloadSchema() {
     const payloadSchema = {
       type: "object",
-      description: "Neccessary configuration data associated with chosen Output Plugin type",
+      description: "Neccessary configuration data for MediaPackage output",
       properties: {
         ingestUrls: {
           description: "On success returns an array of active pull-push sessions",
@@ -71,7 +77,7 @@ export class MediaPackageOutput implements IOutputPlugin {
 }
 
 export class MediaPackageOutputDestination implements IOutputPluginDest {
-  ingestUrls: { url: string; username: string; password: string }[];
+  private ingestUrls: IMediaPackageIngestUrl[];
   webDAVClients: WebDAVClient[];
 
   constructor(opts: IMediaPackageOutputOptions) {
@@ -87,11 +93,7 @@ export class MediaPackageOutputDestination implements IOutputPluginDest {
     });
   }
 
-  logger(logMessage: string) {
-    debug(logMessage);
-  }
-
-  async _fileUploader(opts: IFileUploaderOptions): Promise<boolean> {
+  private async _fileUploader(opts: IFileUploaderOptions): Promise<boolean> {
     let result;
     // For each client/ingestUrl
     for (let i = 0; i < this.webDAVClients.length; i++) {
@@ -123,6 +125,10 @@ export class MediaPackageOutputDestination implements IOutputPluginDest {
     return result;
   }
 
+  logger(logMessage: string) {
+    debug(logMessage);
+  }
+
   async uploadMediaPlaylist(opts: IFileUploaderOptions): Promise<boolean> {
     const uploader = this._fileUploader.bind(this);
     try {
@@ -141,7 +147,7 @@ export class MediaPackageOutputDestination implements IOutputPluginDest {
     const uploader = this._fileUploader.bind(this);
     const fetchAndUpload = async (segURI, fileName): Promise<boolean> => {
       let RETRY_COUNT = 0;
-      while (RETRY_COUNT < MAX_RETIES) {
+      while (RETRY_COUNT < MAX_RETRIES) {
         RETRY_COUNT++;
         const controller = new AbortController();
         const timeout = setTimeout(() => {
@@ -161,7 +167,7 @@ export class MediaPackageOutputDestination implements IOutputPluginDest {
           } else {
             console.error(
               `Segment Unreachable! at ${segURI}. Returned code: ${response.status}. Retries left: [${
-                MAX_RETIES - RETRY_COUNT + 1
+                MAX_RETRIES - RETRY_COUNT + 1
               }]`
             );
             await timer(RETRY_DELAY);
