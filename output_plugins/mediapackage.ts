@@ -1,4 +1,4 @@
-import { IOutputPlugin, IOutputPluginDest } from "../types/output_plugin";
+import { ILocalFileUpload, IOutputPlugin, IOutputPluginDest, IRemoteFileUpload } from "../types/output_plugin";
 import { AuthType, createClient, WebDAVClient } from "webdav";
 import fetch from "node-fetch";
 import Debug from "debug";
@@ -20,11 +20,6 @@ interface IMediaPackageIngestUrl {
 export interface IMediaPackageOutputOptions {
   ingestUrls: IMediaPackageIngestUrl[];
   timeoutMs?: number;
-}
-
-export interface IFileUploaderOptions {
-  fileName: string;
-  fileData: any;
 }
 
 export class MediaPackageOutput implements IOutputPlugin {
@@ -101,7 +96,7 @@ export class MediaPackageOutputDestination implements IOutputPluginDest {
     this.failTimeoutMs = opts.timeoutMs ? opts.timeoutMs : DEFAULT_FAIL_TIMEOUT;
   }
 
-  private async _fileUploader(opts: IFileUploaderOptions): Promise<boolean> {
+  private async _fileUploader(opts: ILocalFileUpload): Promise<boolean> {
     let result;
     // For each client/ingestUrl
     for (let i = 0; i < this.webDAVClients.length; i++) {
@@ -179,7 +174,7 @@ export class MediaPackageOutputDestination implements IOutputPluginDest {
     debug(logMessage);
   }
 
-  async uploadMediaPlaylist(opts: IFileUploaderOptions): Promise<boolean> {
+  async uploadMediaPlaylist(opts: ILocalFileUpload): Promise<boolean> {
     try {
       let result = await this._fileUploader(opts);
       if (!result) {
@@ -192,14 +187,18 @@ export class MediaPackageOutputDestination implements IOutputPluginDest {
     }
   }
 
-  async uploadMediaSegment(opts: any): Promise<boolean> {
+  async uploadMediaSegment(opts: IRemoteFileUpload): Promise<boolean> {
     try {
-      const segURI = opts.segment_uri;
-      const fileName = opts.file_name;
-      let result = false;
-      this.logger(`Going to Fetch->${segURI}, and Upload as->${fileName}`);
-      result = await this._fetchAndUpload(segURI, fileName, this.failTimeoutMs);
-      return result;
+      if (opts.uri) {
+        const segURI = opts.uri;
+        const fileName = opts.fileName;
+        let result = false;
+        this.logger(`Going to Fetch->${segURI}, and Upload as->${fileName}`);
+        result = await this._fetchAndUpload(segURI, fileName, this.failTimeoutMs);
+        return result;
+      } else {
+        throw new Error("plugin only supports fetching remote files");
+      }
     } catch (err) {
       console.error(err);
       throw new Error("uploadMediaSegment Failed:" + err);

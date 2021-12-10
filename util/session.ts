@@ -19,8 +19,8 @@ type ManifestTask = {
 }
 
 type SegmentTask = {
-  segment_uri: string;
-  file_name: string;
+  uri: string;
+  fileName: string;
 }
 
 export class Session {
@@ -361,8 +361,8 @@ export class Session {
           // Design of the File Name here:
           const segmentFileName = `channel_${bw}_${segments["video"][bw].segList[i].index}.ts`;
           let item = {
-            segment_uri: segmentUri,
-            file_name: segmentFileName,
+            uri: segmentUri,
+            fileName: segmentFileName,
           };
           tasks.push(taskQueue.push(item));
         }
