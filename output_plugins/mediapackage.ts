@@ -49,7 +49,7 @@ export class MediaPackageOutput implements IOutputPlugin {
   getPayloadSchema() {
     const payloadSchema = {
       type: "object",
-      description: "Neccessary configuration data associated with chosen Output Plugin type",
+      description: "Neccessary configuration data for MediaPackage output",
       properties: {
         ingestUrls: {
           description: "On success returns an array of active pull-push sessions",
