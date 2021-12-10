@@ -1,6 +1,7 @@
 import uuid from "uuid/v4";
 import { HLSRecorder, ISegments, PlaylistType, Segment } from "@eyevinn/hls-recorder";
 import { promise as fastq } from "fastq";
+import type { queueAsPromised } from "fastq";
 import { GetOnlyNewestSegments, ReplaceSegmentURLs } from "../util/handleSegments";
 import {
   GenerateAudioM3U8,
@@ -12,6 +13,16 @@ const debug = require("debug")("hls-pull-push");
 
 const LIVE_WINDOW_SIZE = 2 * 60; // 120 seconds
 
+type ManifestTask = {
+  fileName: string;
+  fileData: string;
+}
+
+type SegmentTask = {
+  segment_uri: string;
+  file_name: string;
+}
+
 export class Session {
   sessionId: string;
   created: string;
@@ -20,29 +31,29 @@ export class Session {
   collectedSegments: ISegments;
   targetWindowSize: number;
   currentWindowSize: number;
-  concurrentWorkers: number | null;
-  sourceTargetDuration: number | null;
-  sourcePrevMseq: number | null;
+  concurrentWorkers?: number;
+  sourceTargetDuration?: number;
+  sourcePrevMseq?: number;
   atFirstIncrement: boolean;
-  cookieJar: any;
+  cookieJar?: string;
   sourceIsEvent: boolean;
   sourceURL: string;
   name: string;
   destination: string;
   client: any; //WebDAVClient;
-  masterM3U8: any;
-  m3u8Queue: any;
-  segQueue: any;
-  outputDestination: any;
+  masterM3U8?: string;
+  m3u8Queue: queueAsPromised<ManifestTask>;
+  segQueue: queueAsPromised<SegmentTask>;
+  outputDestination: IOutputPluginDest;
   m3uPlaylistData: { mseq: number; dseq: number; targetDur: number };
 
   constructor(params: {
-    name: any;
-    url: any;
+    name: string;
+    url: string;
     plugin: IOutputPluginDest;
-    dest: any;
-    concurrency: any;
-    windowSize: any;
+    dest: string;
+    concurrency?: number;
+    windowSize?: number;
   }) {
     this.sessionId = uuid();
     this.client = null;
@@ -336,7 +347,7 @@ export class Session {
     return -1;
   }
 
-  async _UploadAllSegments(taskQueue: any, segments: ISegments): Promise<any[]> {
+  async _UploadAllSegments(taskQueue: queueAsPromised<SegmentTask>, segments: ISegments): Promise<any[]> {
     const tasks = [];
     const bandwidths = Object.keys(segments["video"]);
     const groupsAudio = Object.keys(segments["audio"]);
@@ -411,7 +422,7 @@ export class Session {
   }
 
   async _UploadAllManifest(
-    taskQueue: any,
+    taskQueue: queueAsPromised<ManifestTask>,
     segments: ISegments,
     m3uPlaylistData: { mseq: number; dseq: number; targetDur: number },
     multiVariantExists: boolean
