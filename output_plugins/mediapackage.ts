@@ -10,8 +10,14 @@ const MAX_RETRIES = 3;
 const RETRY_DELAY = 1 * 1000;
 const timer = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+interface IMediaPackageIngestUrl {
+  url: string;
+  username: string;
+  password: string;
+}
+
 export interface IMediaPackageOutputOptions {
-  ingestUrls: { url: string; username: string; password: string }[];
+  ingestUrls: IMediaPackageIngestUrl[];
 }
 
 export interface IFileUploaderOptions {
@@ -71,7 +77,7 @@ export class MediaPackageOutput implements IOutputPlugin {
 }
 
 export class MediaPackageOutputDestination implements IOutputPluginDest {
-  ingestUrls: { url: string; username: string; password: string }[];
+  private ingestUrls: IMediaPackageIngestUrl[];
   webDAVClients: WebDAVClient[];
 
   constructor(opts: IMediaPackageOutputOptions) {
@@ -87,11 +93,7 @@ export class MediaPackageOutputDestination implements IOutputPluginDest {
     });
   }
 
-  logger(logMessage: string) {
-    debug(logMessage);
-  }
-
-  async _fileUploader(opts: IFileUploaderOptions): Promise<boolean> {
+  private async _fileUploader(opts: IFileUploaderOptions): Promise<boolean> {
     let result;
     // For each client/ingestUrl
     for (let i = 0; i < this.webDAVClients.length; i++) {
@@ -121,6 +123,10 @@ export class MediaPackageOutputDestination implements IOutputPluginDest {
     }
 
     return result;
+  }
+
+  logger(logMessage: string) {
+    debug(logMessage);
   }
 
   async uploadMediaPlaylist(opts: IFileUploaderOptions): Promise<boolean> {
