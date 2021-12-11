@@ -45,7 +45,7 @@ export default function (fastify: FastifyInstance, opts, done) {
           name: requestBody.name,
           url: url.href,
           destPlugin: outputDest,
-          destPluginOpts: requestBody.output,
+          destPluginName: requestBody.output,
           concurrency: requestBody["concurrency"] ? requestBody["concurrency"] : null,
           windowSize: requestBody["windowSize"] ? requestBody["windowSize"] : null,
         });
