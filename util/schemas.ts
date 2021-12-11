@@ -14,6 +14,17 @@ const BadRequestSchema = (exampleMsg) => ({
   },
 });
 
+const AckRequestSchema = (exampleMsg) => ({
+  description: "Acknowledge request description",
+  type: "object",
+  properties: {
+    message: { type: "string", description: "Acknowledgement message "}
+  },
+  example: {
+    message: exampleMsg,
+  },
+});
+
 export const Schemas = (name: string, plugins: IOutputPlugin[]) => {
   let schemaList = [];
   plugins.map(plugin => {
@@ -122,7 +133,7 @@ export const Schemas = (name: string, plugins: IOutputPlugin[]) => {
         },
       },
       response: {
-        204: {},
+        204: AckRequestSchema("Deleted Fetcher Session"),
         404: BadRequestSchema("Fetcher with ID: '886008d7-e53a-4cab-a108-323b88352afd' was not found"),
       },
     };

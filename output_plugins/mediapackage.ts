@@ -1,11 +1,11 @@
-import { IOutputPlugin, IOutputPluginDest } from "../types/output_plugin";
+import { ILocalFileUpload, IOutputPlugin, IOutputPluginDest, IRemoteFileUpload } from "../types/output_plugin";
+import { ILogger } from "../src/logger";
 import { AuthType, createClient, WebDAVClient } from "webdav";
-import winston from "winston";
-const debug = require("debug")("hls-pull-push-mediapackage");
-const fetch = require("node-fetch");
+import fetch from "node-fetch";
+
 const { AbortController } = require("abort-controller");
 
-const FAIL_TIMEOUT = 5 * 1000;
+const DEFAULT_FAIL_TIMEOUT = 5 * 1000;
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 1 * 1000;
 const timer = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -18,15 +18,11 @@ interface IMediaPackageIngestUrl {
 
 export interface IMediaPackageOutputOptions {
   ingestUrls: IMediaPackageIngestUrl[];
-}
-
-export interface IFileUploaderOptions {
-  fileName: string;
-  fileData: any;
+  timeoutMs?: number;
 }
 
 export class MediaPackageOutput implements IOutputPlugin {
-  createOutputDestination(opts: IMediaPackageOutputOptions) {
+  createOutputDestination(opts: IMediaPackageOutputOptions, logger: ILogger): IOutputPluginDest {
     // verify opts
     if (!opts.ingestUrls) {
       throw new Error("Payload Missing 'ingestUrls' parameter");
@@ -43,7 +39,7 @@ export class MediaPackageOutput implements IOutputPlugin {
       });
     }
 
-    return new MediaPackageOutputDestination(opts);
+    return new MediaPackageOutputDestination(opts, logger);
   }
 
   getPayloadSchema() {
@@ -69,6 +65,10 @@ export class MediaPackageOutput implements IOutputPlugin {
             required: ["url", "username", "password"],
           },
         },
+        timeoutMs: {
+          description: "Timeout for fetching source segments",
+          type: "number",
+        },
       },
       required: ["ingestUrls"],
     };
@@ -78,9 +78,12 @@ export class MediaPackageOutput implements IOutputPlugin {
 
 export class MediaPackageOutputDestination implements IOutputPluginDest {
   private ingestUrls: IMediaPackageIngestUrl[];
+  private failTimeoutMs: number;
+  private logger: ILogger;
   webDAVClients: WebDAVClient[];
+  private sessionId?: string;
 
-  constructor(opts: IMediaPackageOutputOptions) {
+  constructor(opts: IMediaPackageOutputOptions, logger: ILogger) {
     this.webDAVClients = [];
     this.ingestUrls = opts.ingestUrls;
     this.ingestUrls.forEach((ingestUrl) => {
@@ -91,9 +94,11 @@ export class MediaPackageOutputDestination implements IOutputPluginDest {
       });
       this.webDAVClients.push(client);
     });
+    this.failTimeoutMs = opts.timeoutMs ? opts.timeoutMs : DEFAULT_FAIL_TIMEOUT;
+    this.logger = logger;
   }
 
-  private async _fileUploader(opts: IFileUploaderOptions): Promise<boolean> {
+  private async _fileUploader(opts: ILocalFileUpload): Promise<boolean> {
     let result;
     // For each client/ingestUrl
     for (let i = 0; i < this.webDAVClients.length; i++) {
@@ -105,14 +110,14 @@ export class MediaPackageOutputDestination implements IOutputPluginDest {
         });
         // Log Results
         if (!result) {
-          this.logger(
-            `Upload Failed! WebDAV Client [${i + 1}/${this.webDAVClients.length}] did not PUT '${
+          this.logger.error(
+            `(${this.sessionId}) Upload Failed! WebDAV Client [${i + 1}/${this.webDAVClients.length}] did not PUT '${
               opts.fileName
             }' to MediaPackage Channel with username: ${this.ingestUrls[i].username}`
           );
         } else {
-          this.logger(
-            `Upload Successful! WebDAV Client [${i + 1}/${this.webDAVClients.length}] PUT '${
+          this.logger.verbose(
+            `(${this.sessionId}) Upload Successful! WebDAV Client [${i + 1}/${this.webDAVClients.length}] PUT '${
               opts.fileName
             }' to MediaPackage Channel with username: ${this.ingestUrls[i].username}`
           );
@@ -125,72 +130,79 @@ export class MediaPackageOutputDestination implements IOutputPluginDest {
     return result;
   }
 
-  logger(logMessage: string) {
-    debug(logMessage);
+  private async _fetchAndUpload(segURI: string, fileName: string, failTimeoutMs: number): Promise<boolean> {
+    let retryCount = 0;
+    while (retryCount < MAX_RETRIES) {
+      retryCount++;
+      const controller = new AbortController();
+      const timeout = setTimeout(() => {
+        controller.abort();
+      }, failTimeoutMs);
+      try {
+        const response = await fetch(segURI, { signal: controller.signal });
+        if (response.status >= 200 && response.status < 300) {
+          let buffer = await response.buffer();
+          const uploaderOptions = {
+            fileName: fileName,
+            fileData: buffer,
+          };
+          clearTimeout(timeout);
+          let result = await this._fileUploader(uploaderOptions);
+          return result;
+        } else {
+          this.logger.error(
+            `(${this.sessionId}) Segment Unreachable! at ${segURI}. Returned code: ${response.status}. Retries left: [${
+              MAX_RETRIES - retryCount + 1
+            }]`
+          );
+          await timer(RETRY_DELAY);
+        }
+      } catch (err) {
+        if (err.type === "aborted") {
+          this.logger.error(`(${this.sessionId}) Request Timeout for fetching (${failTimeoutMs}ms) ${segURI} (${retryCount})`);
+        } else {
+          this.logger.error(err);
+        }
+        return false;
+      } finally {
+        clearTimeout(timeout);
+      }
+    }
+    this.logger.error(`(${this.sessionId}) Segment: '${fileName}' Upload Failed!`);
+    return false;
   }
 
-  async uploadMediaPlaylist(opts: IFileUploaderOptions): Promise<boolean> {
-    const uploader = this._fileUploader.bind(this);
+  attachSessionId(id: string) {
+    this.sessionId = id;
+  }
+
+  async uploadMediaPlaylist(opts: ILocalFileUpload): Promise<boolean> {
     try {
-      let result = await uploader(opts);
+      let result = await this._fileUploader(opts);
       if (!result) {
-        this.logger(`[!]: Manifest (${opts.fileName}) Failed to upload!`);
+        this.logger.error(`(${this.sessionId}) [!]: Manifest (${opts.fileName}) Failed to upload!`);
       }
       return result;
     } catch (err) {
-      console.error(err);
+      this.logger.error(err);
       throw new Error("uploadMediaPlaylist Failed:" + err);
     }
   }
 
-  async uploadMediaSegment(opts: any): Promise<boolean> {
-    const uploader = this._fileUploader.bind(this);
-    const fetchAndUpload = async (segURI, fileName): Promise<boolean> => {
-      let RETRY_COUNT = 0;
-      while (RETRY_COUNT < MAX_RETRIES) {
-        RETRY_COUNT++;
-        const controller = new AbortController();
-        const timeout = setTimeout(() => {
-          console.error(`Request Timeout for ${segURI}`);
-          controller.abort();
-        }, FAIL_TIMEOUT);
-        try {
-          const response = await fetch(segURI, { signal: controller.signal });
-          if (response.status >= 200 && response.status < 300) {
-            let buffer = await response.buffer();
-            const uploaderOptions = {
-              fileName: fileName,
-              fileData: buffer,
-            };
-            let result = await uploader(uploaderOptions);
-            return result;
-          } else {
-            console.error(
-              `Segment Unreachable! at ${segURI}. Returned code: ${response.status}. Retries left: [${
-                MAX_RETRIES - RETRY_COUNT + 1
-              }]`
-            );
-            await timer(RETRY_DELAY);
-          }
-        } catch (err) {
-          console.error(err);
-          return false;
-        } finally {
-          clearTimeout(timeout);
-        }
-      }
-      console.error(`Segment: '${fileName}' Upload Failed!`);
-      return false;
-    };
+  async uploadMediaSegment(opts: IRemoteFileUpload): Promise<boolean> {
     try {
-      const segURI = opts.segment_uri;
-      const fileName = opts.file_name;
-      let result = false;
-      this.logger(`Going to Fetch->${segURI}, and Upload as->${fileName}`);
-      result = await fetchAndUpload(segURI, fileName);
-      return result;
+      if (opts.uri) {
+        const segURI = opts.uri;
+        const fileName = opts.fileName;
+        let result = false;
+        this.logger.verbose(`(${this.sessionId}) Going to Fetch->${segURI}, and Upload as->${fileName}`);
+        result = await this._fetchAndUpload(segURI, fileName, this.failTimeoutMs);
+        return result;
+      } else {
+        throw new Error("plugin only supports fetching remote files");
+      }
     } catch (err) {
-      console.error(err);
+      this.logger.error(err);
       throw new Error("uploadMediaSegment Failed:" + err);
     }
   }
