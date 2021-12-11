@@ -81,6 +81,7 @@ export class MediaPackageOutputDestination implements IOutputPluginDest {
   private failTimeoutMs: number;
   private logger: ILogger;
   webDAVClients: WebDAVClient[];
+  private sessionId?: string;
 
   constructor(opts: IMediaPackageOutputOptions, logger: ILogger) {
     this.webDAVClients = [];
@@ -110,13 +111,13 @@ export class MediaPackageOutputDestination implements IOutputPluginDest {
         // Log Results
         if (!result) {
           this.logger.error(
-            `Upload Failed! WebDAV Client [${i + 1}/${this.webDAVClients.length}] did not PUT '${
+            `(${this.sessionId}) Upload Failed! WebDAV Client [${i + 1}/${this.webDAVClients.length}] did not PUT '${
               opts.fileName
             }' to MediaPackage Channel with username: ${this.ingestUrls[i].username}`
           );
         } else {
-          this.logger.info(
-            `Upload Successful! WebDAV Client [${i + 1}/${this.webDAVClients.length}] PUT '${
+          this.logger.verbose(
+            `(${this.sessionId}) Upload Successful! WebDAV Client [${i + 1}/${this.webDAVClients.length}] PUT '${
               opts.fileName
             }' to MediaPackage Channel with username: ${this.ingestUrls[i].username}`
           );
@@ -150,7 +151,7 @@ export class MediaPackageOutputDestination implements IOutputPluginDest {
           return result;
         } else {
           this.logger.error(
-            `Segment Unreachable! at ${segURI}. Returned code: ${response.status}. Retries left: [${
+            `(${this.sessionId}) Segment Unreachable! at ${segURI}. Returned code: ${response.status}. Retries left: [${
               MAX_RETRIES - retryCount + 1
             }]`
           );
@@ -158,7 +159,7 @@ export class MediaPackageOutputDestination implements IOutputPluginDest {
         }
       } catch (err) {
         if (err.type === "aborted") {
-          this.logger.error(`Request Timeout for fetching (${failTimeoutMs}ms) ${segURI} (${retryCount})`);
+          this.logger.error(`(${this.sessionId}) Request Timeout for fetching (${failTimeoutMs}ms) ${segURI} (${retryCount})`);
         } else {
           this.logger.error(err);
         }
@@ -167,15 +168,19 @@ export class MediaPackageOutputDestination implements IOutputPluginDest {
         clearTimeout(timeout);
       }
     }
-    this.logger.error(`Segment: '${fileName}' Upload Failed!`);
+    this.logger.error(`(${this.sessionId}) Segment: '${fileName}' Upload Failed!`);
     return false;
+  }
+
+  attachSessionId(id: string) {
+    this.sessionId = id;
   }
 
   async uploadMediaPlaylist(opts: ILocalFileUpload): Promise<boolean> {
     try {
       let result = await this._fileUploader(opts);
       if (!result) {
-        this.logger.error(`[!]: Manifest (${opts.fileName}) Failed to upload!`);
+        this.logger.error(`(${this.sessionId}) [!]: Manifest (${opts.fileName}) Failed to upload!`);
       }
       return result;
     } catch (err) {
@@ -190,7 +195,7 @@ export class MediaPackageOutputDestination implements IOutputPluginDest {
         const segURI = opts.uri;
         const fileName = opts.fileName;
         let result = false;
-        this.logger.info(`Going to Fetch->${segURI}, and Upload as->${fileName}`);
+        this.logger.verbose(`(${this.sessionId}) Going to Fetch->${segURI}, and Upload as->${fileName}`);
         result = await this._fetchAndUpload(segURI, fileName, this.failTimeoutMs);
         return result;
       } else {

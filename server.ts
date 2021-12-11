@@ -24,8 +24,8 @@ class MyLogger implements ILogger {
     this.logger.info(message);
   }
 
-  debug(message: string) {
-    this.logger.debug(message);
+  verbose(message: string) {
+    this.logger.verbose(message);
   }
 
   error(message: string) {

@@ -15,6 +15,7 @@ export interface IRemoteFileUpload extends ILocalFileUpload {
 }
 
 export interface IOutputPluginDest {
+  attachSessionId(id: string): void;
   uploadMediaPlaylist(opts: ILocalFileUpload): Promise<boolean>;
   uploadMediaSegment(opts: IRemoteFileUpload): Promise<boolean>;
 }

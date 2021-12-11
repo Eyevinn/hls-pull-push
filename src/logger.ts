@@ -1,5 +1,5 @@
 export interface ILogger {
-  debug: (message: string) => void;
+  verbose: (message: string) => void;
   info: (message: string) => void;
   error: (message: string) => void;
 }
@@ -9,8 +9,8 @@ export class AbstractLogger implements ILogger {
     console.log(`${level}: ${message}`);
   }
 
-  debug(message: string) {
-    this.doLog("DEBUG", message);
+  verbose(message: string) {
+    this.doLog("VERBOSE", message);
   }
 
   info(message: string) {
