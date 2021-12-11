@@ -52,7 +52,7 @@ if (process.env.NODE_ENV === "demo") {
       password: process.env.DEMO_PASSWORD,
     }]
   }, pullPushService.getLogger());
-  const source = new URL("https://demo.vc.eyevinn.technology/channels/eyevinn/master.m3u8");
+  const source = new URL("https://demo.vc.eyevinn.technology/channels/demo/master.m3u8");
   const sessionId = pullPushService.startFetcher({
     name: "demo",
     url: source.href,
