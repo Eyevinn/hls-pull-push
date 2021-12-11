@@ -24,6 +24,7 @@
     "@eyevinn/hls-recorder": "^0.4.0",
     "abort-controller": "^3.0.0",
     "debug": "^4.3.2",
+    "dotenv": "^10.0.0",
     "fastify": "^3.22.1",
     "fastify-cors": "^6.0.2",
     "fastify-swagger": "^4.12.6",
