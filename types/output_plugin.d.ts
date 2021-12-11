@@ -1,4 +1,4 @@
-import { ILogger } from "../src/logger";
+import { ILogger } from "./index";
 
 export interface IOutputPlugin {
   createOutputDestination(opts: any, logger: ILogger);

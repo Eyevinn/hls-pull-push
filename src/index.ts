@@ -1,7 +1,8 @@
 import fastify, { FastifyInstance } from "fastify";
 import { Session } from "../util/session";
 import { IOutputPlugin, IOutputPluginDest } from "../types/output_plugin";
-import { AbstractLogger, ILogger } from "./logger";
+import { ILogger } from "../types/index";
+import { AbstractLogger } from "./logger";
 import uuid from "uuid/v4";
 export { MediaPackageOutput } from "../output_plugins/mediapackage";
 

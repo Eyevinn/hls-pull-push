@@ -1,4 +1,5 @@
-import { HLSPullPush, ILogger, MediaPackageOutput } from "./index";
+import { HLSPullPush, MediaPackageOutput } from "./index";
+import { ILogger } from "./types/index";
 import { createLogger, transports, format, Logger } from "winston";
 const { combine, timestamp, printf } = format;
 
