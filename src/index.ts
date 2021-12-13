@@ -48,20 +48,20 @@ export class HLSPullPush {
     name, 
     url, 
     destPlugin, 
-    destPluginOpts, 
+    destPluginName, 
     concurrency, 
     windowSize 
   }: { 
     name: string; 
     url: string; 
     destPlugin: IOutputPluginDest; 
-    destPluginOpts: any; 
+    destPluginName: string; 
     concurrency?: number; 
     windowSize?: number 
   }): string {
 
     // Create new session and add to local store
-    const session = new Session({ name, url, plugin: destPlugin, dest: destPluginOpts, concurrency, windowSize });
+    const session = new Session({ name, url, plugin: destPlugin, dest: destPluginName, concurrency, windowSize });
 
     // Store Hls recorder in dictionary in-memory
     this.SESSIONS[session.sessionId] = session;
