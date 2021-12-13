@@ -7,7 +7,8 @@
     "build": "tsc --project ./",
     "postversion": "git push && git push --tags",
     "test": "echo \"WARN: no test specified\" && exit 0",
-    "dev": "node dist/server.js"
+    "dev": "node dist/server.js",
+    "demo": "NODE_ENV=demo node dist/server.js"
   },
   "author": "Eyevinn Technology <work@eyevinn.se>",
   "license": "MIT",
