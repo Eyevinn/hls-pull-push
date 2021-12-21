@@ -1,6 +1,6 @@
 {
   "name": "@eyevinn/hls-pull-push",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "NPM library to pull HLS Live and Push to a another origin",
   "main": "dist/index.js",
   "scripts": {
