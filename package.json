@@ -1,6 +1,6 @@
 {
   "name": "@eyevinn/hls-pull-push",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "description": "NPM library to pull HLS Live and Push to a another origin",
   "main": "dist/index.js",
   "scripts": {
@@ -22,7 +22,7 @@
   },
   "dependencies": {
     "@aws-sdk/client-mediapackage": "^3.41.0",
-    "@eyevinn/hls-recorder": "^0.4.1",
+    "@eyevinn/hls-recorder": "^0.4.2",
     "abort-controller": "^3.0.0",
     "debug": "^4.3.2",
     "dotenv": "^10.0.0",
