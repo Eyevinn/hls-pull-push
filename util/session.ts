@@ -212,7 +212,7 @@ export class Session {
 
           debug(`[${this.sessionId}]: Trying to Push all new hlsrecorder segments to Output`);
 
-          if (this.atFirstIncrement || this.sourceIsEvent || this.active) {
+          if (this.atFirstIncrement || this.sourceIsEvent || data.type === PlaylistType.LIVE || this.active) {
             // Make Segment Urls formatted and ready for Manifest Generation
             SegmentsWithNewURL = ReplaceSegmentURLs(this.collectedSegments);
             // Upload Recording Playlist Manifest to S3 Bucket
