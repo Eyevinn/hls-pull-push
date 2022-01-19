@@ -16,12 +16,12 @@ const LIVE_WINDOW_SIZE = 2 * 60; // 120 seconds
 type ManifestTask = {
   fileName: string;
   fileData: string;
-}
+};
 
 type SegmentTask = {
   uri: string;
   fileName: string;
-}
+};
 
 export class Session {
   sessionId: string;
@@ -40,7 +40,6 @@ export class Session {
   sourceURL: string;
   name: string;
   destination: string;
-  client: any; //WebDAVClient;
   masterM3U8?: string;
   m3u8Queue: queueAsPromised<ManifestTask>;
   segQueue: queueAsPromised<SegmentTask>;
@@ -56,7 +55,6 @@ export class Session {
     windowSize?: number;
   }) {
     this.sessionId = uuid();
-    this.client = null;
     this.created = new Date().toISOString();
     this.atFirstIncrement = true;
     this.sourceIsEvent = false;
@@ -253,9 +251,14 @@ export class Session {
 
   async StopHLSRecorder(): Promise<void> {
     if (this.hlsrecorder) {
-      await this.hlsrecorder.stop();
-      this.active = false;
-      debug(`[${this.sessionId}]: Recorder session set to inactive`);
+      try {
+        await this.hlsrecorder.stop();
+        this.active = false;
+        debug(`[${this.sessionId}]: Recorder session set to inactive`);
+      } catch (err) {
+        debug(`[${this.sessionId}]: Error when stopping HLSRecorder`);
+        throw new Error(err);
+      }
     }
   }
 
@@ -359,7 +362,8 @@ export class Session {
         const segmentUri = segments["video"][bw].segList[i].uri;
         if (segmentUri) {
           // Design of the File Name here:
-          const segmentFileName = `channel_${bw}_${segments["video"][bw].segList[i].index}.ts`;
+          const sourceFileExtension = new URL(segmentUri).pathname.split(".").pop();
+          const segmentFileName = `channel_${bw}_${segments["video"][bw].segList[i].index}.${sourceFileExtension}`;
           let item = {
             uri: segmentUri,
             fileName: segmentFileName,
