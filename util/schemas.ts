@@ -52,6 +52,16 @@ export const Schemas = (name: string, plugins: IOutputPlugin[]) => {
           payload: {
             oneOf: schemaList,
           },
+          concurrency: {
+            type: "number",
+            description: "Max number of concurrent jobs for fetcher. Default=10",
+            example: 10
+          },
+          windowSize: {
+            type: "string",
+            description: "Desired max window size (seconds) of the uploaded media playlists. Default=120",
+            example: 120
+          }
         },
         required: ["name", "url", "output", "payload"],
       },
