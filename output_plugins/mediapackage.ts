@@ -68,6 +68,7 @@ export class MediaPackageOutput implements IOutputPlugin {
         timeoutMs: {
           description: "Timeout for fetching source segments",
           type: "number",
+          example: 5000
         },
       },
       required: ["ingestUrls"],
