@@ -13,6 +13,7 @@ import { IOutputPluginDest } from "../types/output_plugin";
 const debug = require("debug")("hls-pull-push");
 
 const LIVE_WINDOW_SIZE = 2 * 60; // 120 seconds
+const REMOVED_SEGMENT_TTL = 1 * 60 * 1000; // 60 seconds
 
 type ManifestTask = {
   fileName: string;
@@ -23,6 +24,15 @@ type SegmentTask = {
   uri: string;
   fileName: string;
 };
+
+type SegmentRemovalTask = {
+  fileName: string;
+};
+
+interface IRemovedSegment {
+  segmentFileName: string;
+  timeOfRemoval: number;
+}
 
 export class Session {
   sessionId: string;
@@ -44,10 +54,12 @@ export class Session {
   masterM3U8?: string;
   m3u8Queue: queueAsPromised<ManifestTask>;
   segQueue: queueAsPromised<SegmentTask>;
+  segRemovalQueue?: queueAsPromised<SegmentRemovalTask>;
   outputDestination: IOutputPluginDest;
   m3uPlaylistData: { mseq: number; dseq: number; targetDur: number };
   eventQueue: any[];
   eventQueueHasStopped: boolean;
+  segmentGraveyard: IRemovedSegment[];
 
   constructor(params: {
     name: string;
@@ -90,6 +102,7 @@ export class Session {
       dseq: 0,
       targetDur: 0,
     };
+    this.segmentGraveyard = [];
     this.eventQueue = [];
     this.eventQueueHasStopped = true;
     // Init queue workers, one for segments, one for manifests
@@ -101,7 +114,12 @@ export class Session {
       this.outputDestination.uploadMediaSegment.bind(this.outputDestination),
       this.concurrentWorkers
     );
-
+    if (this.outputDestination.deleteMediaSegment) {
+      this.segRemovalQueue = fastq(
+        this.outputDestination.deleteMediaSegment.bind(this.outputDestination),
+        this.concurrentWorkers
+      );
+    }
     // .-------------------------------------------.
     // |   Processing new recorder segment items   |
     // '-------------------------------------------'
@@ -204,7 +222,7 @@ export class Session {
           debug(`[${this.sessionId}]: No multivariant manifest to be uploaded...`);
         }
       } catch (error) {
-        console.error("Issue with webDAV", error);
+        console.error("Issue with Plugin Uploader", error);
       }
     }
 
@@ -270,6 +288,17 @@ export class Session {
             `[${this.sessionId}]: Recorders internal discontinuity-sequence count now at: [ ${this.m3uPlaylistData.dseq} ]`
           );
         }
+        // - Delete Removed Segments via Plugin Delete function if any
+        if (segRemovalData.removedSegmentsList.length > 0 && this.segRemovalQueue) {
+          // - Push newly removed seglist to global segment Graveyard
+          this.segmentGraveyard = this.segmentGraveyard.concat(segRemovalData.removedSegmentsList);
+          let gy_size_before = this.segmentGraveyard.length;
+          // - Delete Segments from Destination if their Graveyard TTL has expired
+          await this._DeleteOlderSegments();
+          debug(`[${this.sessionId}]: Finished deleting all segments at output destination!`);
+          let gy_size_after = this.segmentGraveyard.length;
+          console.log(`GY SIZE BEFORE: ${gy_size_before} -> GY AFTER: ${gy_size_after}`);
+        }
       }
       this.m3uPlaylistData.targetDur = this._getTargetDuration(this.collectedSegments);
 
@@ -314,6 +343,29 @@ export class Session {
       }
     } else {
       return "NONE";
+    }
+  }
+
+  async _DeleteOlderSegments(): Promise<void> {
+    // - Depending on time, get new list of segments to be deleted
+    const segmentsToDelete: string[] = this.segmentGraveyard
+      .filter((segItem) => Date.now() >= segItem.timeOfRemoval + REMOVED_SEGMENT_TTL)
+      .map((segItem) => segItem.segmentFileName);
+    // - Run Deletion Jobs if any
+    if (segmentsToDelete.length > 0) {
+      let tasksRemoval = await this._RemoveAllSegments(this.segRemovalQueue, segmentsToDelete);
+      // Let the Workers Work!
+      const resultsDelete = [];
+      for (let result of tasksRemoval) {
+        resultsDelete.push(await result);
+      }
+      const successfullyDeletedSegments: string[] = segmentsToDelete.filter(
+        (_, index) => resultsDelete[index]
+      );
+      // - permanently delete segments from graveyard
+      this.segmentGraveyard = this.segmentGraveyard.filter(
+        (segItem) => !successfullyDeletedSegments.includes(segItem.segmentFileName)
+      );
     }
   }
 
@@ -443,6 +495,18 @@ export class Session {
       }
     }
     */
+
+    return tasks;
+  }
+
+  async _RemoveAllSegments(taskQueue: queueAsPromised<SegmentRemovalTask>, fileNameList: string[]) {
+    const tasks = [];
+    fileNameList.forEach((name) => {
+      let item: SegmentRemovalTask = {
+        fileName: name,
+      };
+      tasks.push(taskQueue.push(item));
+    });
 
     return tasks;
   }
@@ -675,10 +739,12 @@ export class Session {
   _AdjustForWindowSize(Segments: ISegments): {
     segmentsReleased: number;
     discontinuityTagsReleased: number;
+    removedSegmentsList: IRemovedSegment[];
   } {
     let output = {
       segmentsReleased: 0,
       discontinuityTagsReleased: 0,
+      removedSegmentsList: [],
     };
     while (this.currentWindowSize > this.targetWindowSize) {
       // Add tag to for all media
@@ -692,6 +758,15 @@ export class Session {
       // Start Shifting on all video lists
       bandwidths.forEach((bw, index) => {
         const releasedSegmentItem = Segments["video"][bw].segList.shift();
+        if (releasedSegmentItem?.uri) {
+          const sourceFileExtension = new URL(releasedSegmentItem?.uri).pathname.split(".").pop();
+          const segmentFileName = `channel_${bw}_${releasedSegmentItem.index}.${sourceFileExtension}`;
+          const removedItem: IRemovedSegment = {
+            segmentFileName: segmentFileName,
+            timeOfRemoval: Date.now(),
+          };
+          output.removedSegmentsList.push(removedItem);
+        }
         if (index === 0) {
           if (releasedSegmentItem?.duration) {
             // Reduce current window size...
@@ -703,23 +778,27 @@ export class Session {
           }
         }
       });
+      /* TODO: Support MultiTrack
+
+      
       // Shifting on all audio lists
       groups.forEach((group) => {
         const langs = Object.keys(Segments["audio"][group]);
         for (let i = 0; i < langs.length; i++) {
           let lang = langs[i];
-          Segments["audio"][group][lang].segList.shift();
+          const releasedSegmentItem = Segments["audio"][group][lang].segList.shift();
         }
       });
-
       // Shifting on all subtitle lists
       groupsSubs.forEach((group) => {
         const langs = Object.keys(Segments["subtitle"][group]);
         for (let i = 0; i < langs.length; i++) {
           let lang = langs[i];
-          Segments["subtitle"][group][lang].segList.shift();
+          const releasedSegmentItem = Segments["subtitle"][group][lang].segList.shift();
         }
       });
+
+      */
     }
 
     return output;

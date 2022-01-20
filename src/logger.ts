@@ -13,6 +13,10 @@ export class AbstractLogger implements ILogger {
     this.doLog("INFO", message);
   }
 
+  warn(message: string) {
+    this.doLog("WARN", message);
+  }
+
   error(message: string) {
     console.error(message);
   }
