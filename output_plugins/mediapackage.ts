@@ -1,5 +1,5 @@
 import { ILocalFileUpload, IOutputPlugin, IOutputPluginDest, IRemoteFileUpload } from "../types/output_plugin";
-import { ILogger } from "../types/index";
+import { ILogger } from "../types/index";
 import { AuthType, createClient, WebDAVClient } from "webdav";
 import fetch from "node-fetch";
 
