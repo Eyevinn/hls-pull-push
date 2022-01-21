@@ -66,7 +66,7 @@ Example S3:
   },
 }
 ```
->To use the S3 plugin you need to set your (AWS environment variables)[https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-envvars.html] including `AWS_REGION`
+> Note: To use the S3 plugin you need to set your [AWS environment variables](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-envvars.html) including `AWS_REGION`
 
 ## Environment Variables
 - `DEFAULT_LIVE_WINDOW_SIZE`: The size of desired default window size (in seconds) for output stream when input is a live playlist type. Default 120
