@@ -9,18 +9,13 @@ npm install --save @eyevinn/hls-pull-push
 ## Usage
 
 ```javascript
-import { HLSPullPush, MediaPackageOutput, S3Output } from "@eyevinn/hls-pull-push";
+import { HLSPullPush, MediaPackageOutput, S3BucketOutput } from "@eyevinn/hls-pull-push";
 
 const pullPushService = new HLSPullPush();
 pullPushService.registerPlugin("mediapackage", new MediaPackageOutput());
-pullPushService.registerPlugin("s3", new S3Output({ 
-  region: "eu-north-1",
-  access_key_id: "***"
-  secret_access_key: "***",
-}));
+pullPushService.registerPlugin("s3", new S3BucketOutput());
 pullPushService.listen(process.env.PORT || 8080);
 ```
->S3Output plugin is not yet implemented
 ## API
 
 | ENDPOINT                      | METHOD | DESCRIPTION                                 |
@@ -46,7 +41,7 @@ pullPushService.listen(process.env.PORT || 8080);
 Example MediaPackage:
 ```
 {
-  "name": "eyevinn",
+  "name": "eyevinn-mp",
   "url": "https://demo.vc.eyevinn.technology/channels/eyevinn/master.m3u8",
   "output": "mediapackage",
   "payload": {
@@ -62,16 +57,19 @@ Example MediaPackage:
 Example S3:
 ```
 {
-  "name": "s3cache",
+  "name": "eyevinn-s3",
   "url": "https://demo.vc.eyevinn.technology/channels/eyevinn/master.m3u8",
   "output": "s3",
-  "concurrency": 10,
-  "windowSize": 300,
   "payload": {
-    "bucket": "origin-live"
-  }
+    "bucket": "test-live-output",
+    "folder": "S3_PLUGIN_CONTENT",
+  },
 }
 ```
+
+## Environment Variables
+- `DEFAULT_LIVE_WINDOW_SIZE`: The size of desired default window size (in seconds) for output stream when input is a live playlist type. Default 120
+- `REMOVED_SEGMENT_TTL`: For output plugins which support segment deletion, this variable determines the max age (in seconds) for a segment at an output destination that is no longer included in the output manifest before it is permanently deleted. Default 60  
 ## Prerequisites
 - nodejs >= 12.0.0
 - In case of using the `MediaPackageOutput` plugin, you need to have an aws mediapackage channel set up expecting HLS as input.
@@ -79,7 +77,7 @@ Example S3:
 The service uses the debugging utility `debug`. To see relavant logs from the service, run with env `DEBUG` set to `hls-*`. 
 
 ## Input HLS: Supported Types and Expected Behaviours
-HLS streams using fMP4 and encryption are not supported in this service currently.
+HLS streams using fMP4 and encryption are not supported in this service currently. As well as multitrack (demuxed) streams.
 With that in mind, the service can take in HLS streams that are of the playlist types LIVE, EVENT or VOD.
 
 When the HLS stream is a LIVE type, then the default `windowSize` will be set to 120 seconds, unless `windowSize` is present in the POST JSON. 
@@ -96,7 +94,6 @@ When the HLS stream is a VOD type, then the fetcher session will only need to pu
 Allowing for multiple sessions uploading to the same destination and overwriting each others files.
 - Until fixed, when HLS source is type EVENT but still has a sliding window, no fetching occurs.
 - Fetcher List in GET endpoint do not communicate if fetcher sessions are faulty or not, only if they are active.
-- S3Output plugin is not yet implemented.
 
 
 # About Eyevinn Technology
