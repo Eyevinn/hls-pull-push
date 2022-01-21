@@ -9,7 +9,6 @@ import { ILogger } from "../types/index";
 import fetch from "node-fetch";
 import { AwsUploadModule } from "@eyevinn/iaf-plugin-aws-s3";
 import { S3Client, S3 } from "@aws-sdk/client-s3";
-import path from "path/posix";
 
 const { AbortController } = require("abort-controller");
 require("dotenv").config();
@@ -131,11 +130,15 @@ export class S3BucketOutputDestination implements IOutputPluginDest {
 
   async deleteMediaSegment(opts: IRemoteFileDeletion): Promise<boolean> {
     try {
-      // Extract file name from url
-      const targetFileName = opts.fileName;
-      this.logger.verbose(`(${this.sessionId}) Going to Remove->${targetFileName}`);
-      const result = await this._deleteFile(targetFileName);
-      return result;
+      if (opts.fileName) {
+        const result = await this._deleteFile(opts.fileName);
+        this.logger.verbose(
+          `(${this.sessionId}) File Deletion '${opts.fileName}' ${result ? "successful" : "failed"}`
+        );
+        return result;
+      } else {
+        throw new Error("plugin requires 'fileName' option");
+      }
     } catch (err) {
       this.logger.error(err);
       throw new Error("deleteMediaSegment Failed:" + err);
@@ -153,15 +156,6 @@ export class S3BucketOutputDestination implements IOutputPluginDest {
           this.awsUploadModule.fileUploadedDelegate(res);
           result = true;
         });
-      // await timer(1000);
-      if (typeof opts.fileData === "string" && opts.fileData.indexOf("#EXT-X-ENDLIST") !== -1) {
-        this.logger.info(`Uploaded (${opts.fileName})<-w/ENDLIST to S3 Bucket (${this.bucketName})`);
-      } else {
-        // this.logger.info(
-        //   `F A K E [${this.sessionId}]: Uploaded (${opts.fileName}) to S3 Bucket (${this.bucketName})`
-        // );
-      }
-      // result = true;
     } catch (err) {
       this.logger.error(
         `[${this.sessionId}]: [!] Problem occured when uploading file: '${opts.fileName}' to destination. Full Error: "${err}"`
@@ -173,20 +167,23 @@ export class S3BucketOutputDestination implements IOutputPluginDest {
   }
 
   private async _deleteFile(fileName: string): Promise<boolean> {
-    let result: boolean;
+    let result: boolean = false;
     const params = {
       Bucket: this.bucketName,
       Key: `${this.folderName}/${fileName}`,
     };
     return new Promise((resolve, rejects) => {
-      this.s3Client.deleteObject(params, function (err, data) {
+      this.s3Client.deleteObject(params, function (err: any, data: any) {
         if (err) {
           console.log(err, err.stack);
-          result = false;
           rejects(result);
         }
-        console.log("NICE ------------------------- I DELETED A FILE???", params.Key, "data:", data);
-        result = true;
+
+        if (data && data["$metadata"]) {
+          if (data["$metadata"].httpStatusCode && data["$metadata"].httpStatusCode === 204) {
+            result = true;
+          }
+        }
         resolve(result);
       });
     });
