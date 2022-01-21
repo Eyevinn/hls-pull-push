@@ -41,11 +41,27 @@ class MyLogger implements ILogger {
 }
 
 const pullPushService = new HLSPullPush(new MyLogger(process.env.NODE_ENV));
-const outputPlugin_mp = new MediaPackageOutput();
-pullPushService.registerPlugin("mediapackage", outputPlugin_mp);
-
-const outputPlugin_s3 = new S3BucketOutput();
-pullPushService.registerPlugin("s3", outputPlugin_s3);
+const outputPlugin = new MediaPackageOutput();
+pullPushService.registerPlugin("mediapackage", outputPlugin);
 
 pullPushService.getLogger().info("Running");
 pullPushService.listen(process.env.PORT || 8080);
+
+if (process.env.NODE_ENV === "demo") {
+  // In demo mode we want to automatically start a fetcher
+  const outputDest = outputPlugin.createOutputDestination({
+    ingestUrls: [ {
+      url: process.env.DEMO_CHANNEL,
+      username: process.env.DEMO_USERNAME,
+      password: process.env.DEMO_PASSWORD,
+    }]
+  }, pullPushService.getLogger());
+  const source = new URL("https://demo.vc.eyevinn.technology/channels/demo/master.m3u8");
+  const sessionId = pullPushService.startFetcher({
+    name: "demo",
+    url: source.href,
+    destPlugin: outputDest,
+    destPluginName: "mediapackage"
+  });
+  outputDest.attachSessionId(sessionId);
+}
