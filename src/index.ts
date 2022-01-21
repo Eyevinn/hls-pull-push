@@ -1,10 +1,10 @@
 import fastify, { FastifyInstance } from "fastify";
 import { Session } from "../util/session";
 import { IOutputPlugin, IOutputPluginDest } from "../types/output_plugin";
-import { ILogger } from "../types/index";
-import { AbstractLogger } from "./logger";
-import uuid from "uuid/v4";
+import { ILogger } from "../types/index";
+import { AbstractLogger } from "./logger";
 export { MediaPackageOutput } from "../output_plugins/mediapackage";
+export { S3BucketOutput } from "../output_plugins/s3bucket";
 
 import api from "./api";
 
@@ -16,8 +16,8 @@ export interface IDestPayload {
 
 export class HLSPullPush {
   private server: FastifyInstance;
-  private PLUGINS: {[name: string]: IOutputPlugin};
-  private SESSIONS: {[sessionId: string]: Session};
+  private PLUGINS: { [name: string]: IOutputPlugin };
+  private SESSIONS: { [sessionId: string]: Session };
   private logger: ILogger;
 
   constructor(logger?: ILogger) {
@@ -44,24 +44,30 @@ export class HLSPullPush {
     });
   }
 
-  startFetcher({ 
-    name, 
-    url, 
-    destPlugin, 
-    destPluginName, 
-    concurrency, 
-    windowSize 
-  }: { 
-    name: string; 
-    url: string; 
-    destPlugin: IOutputPluginDest; 
-    destPluginName: string; 
-    concurrency?: number; 
-    windowSize?: number 
+  startFetcher({
+    name,
+    url,
+    destPlugin,
+    destPluginName,
+    concurrency,
+    windowSize,
+  }: {
+    name: string;
+    url: string;
+    destPlugin: IOutputPluginDest;
+    destPluginName: string;
+    concurrency?: number;
+    windowSize?: number;
   }): string {
-
     // Create new session and add to local store
-    const session = new Session({ name, url, plugin: destPlugin, dest: destPluginName, concurrency, windowSize });
+    const session = new Session({
+      name,
+      url,
+      plugin: destPlugin,
+      dest: destPluginName,
+      concurrency,
+      windowSize,
+    });
 
     // Store Hls recorder in dictionary in-memory
     this.SESSIONS[session.sessionId] = session;
@@ -81,9 +87,9 @@ export class HLSPullPush {
     this.logger.info(`Deleting Fetcher Session [ ${fetcherId} ] from Session Storage`);
     delete this.SESSIONS[fetcherId];
   }
-  
+
   isValidFetcher(fetcherId: string): boolean {
-    return (this.SESSIONS[fetcherId] ? true : false);
+    return this.SESSIONS[fetcherId] ? true : false;
   }
 
   getActiveFetchers() {
@@ -115,11 +121,11 @@ export class HLSPullPush {
       return result;
     } catch (err) {
       console.error(err);
-    }  
+    }
   }
 
   getRegisteredPlugins(): IOutputPlugin[] {
-    return Object.keys(this.PLUGINS).map(name => this.PLUGINS[name]);
+    return Object.keys(this.PLUGINS).map((name) => this.PLUGINS[name]);
   }
 
   getLogger(): ILogger {

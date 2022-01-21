@@ -1,4 +1,4 @@
-import { HLSPullPush, MediaPackageOutput } from "./index";
+import { HLSPullPush, MediaPackageOutput, S3BucketOutput } from "./index";
 import { ILogger } from "./types/index";
 import { createLogger, transports, format, Logger } from "winston";
 const { combine, timestamp, printf } = format;
@@ -29,6 +29,10 @@ class MyLogger implements ILogger {
 
   verbose(message: string) {
     this.logger.verbose(message);
+  }
+
+  warn(message: string) {
+    this.logger.warn(message);
   }
 
   error(message: string) {

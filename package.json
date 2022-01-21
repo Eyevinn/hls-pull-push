@@ -26,7 +26,8 @@
   },
   "dependencies": {
     "@aws-sdk/client-mediapackage": "^3.41.0",
-    "@eyevinn/hls-recorder": "^0.4.2",
+    "@eyevinn/hls-recorder": "^0.5.4",
+    "@eyevinn/iaf-plugin-aws-s3": "^1.0.0",
     "abort-controller": "^3.0.0",
     "clone": "^2.1.2",
     "debug": "^4.3.2",
@@ -37,10 +38,6 @@
     "fastq": "^1.13.0",
     "fs": "^0.0.1-security",
     "node-fetch": "^2.6.6",
-    "path": "^0.12.7",
-    "request": "^2.88.2",
-    "stream": "^0.0.2",
-    "string-to-stream": "^3.0.1",
     "uuid": "^3.4.0",
     "webdav": "^4.7.0",
     "winston": "^3.3.3"
