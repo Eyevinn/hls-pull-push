@@ -41,11 +41,11 @@ class MyLogger implements ILogger {
 }
 
 const pullPushService = new HLSPullPush(new MyLogger(process.env.NODE_ENV));
-//const outputPlugin = new MediaPackageOutput();
-//pullPushService.registerPlugin("mediapackage", outputPlugin);
+const outputPlugin_mp = new MediaPackageOutput();
+pullPushService.registerPlugin("mediapackage", outputPlugin_mp);
 
-const outputPlugin = new S3BucketOutput();
-pullPushService.registerPlugin("s3", outputPlugin);
+const outputPlugin_s3 = new S3BucketOutput();
+pullPushService.registerPlugin("s3", outputPlugin_s3);
 
 pullPushService.getLogger().info("Running");
 pullPushService.listen(process.env.PORT || 8080);

@@ -8,12 +8,12 @@ import {
   GenerateAudioM3U8,
   GenerateMediaM3U8,
   GenerateSubtitleM3U8,
-} from "@eyevinn/hls-recorder/dist/util/manifest_generator";
+} from "@eyevinn/hls-recorder/dist/util/manifest_generator.js";
 import { IOutputPluginDest } from "../types/output_plugin";
 const debug = require("debug")("hls-pull-push");
 
-const LIVE_WINDOW_SIZE = 2 * 60; // 120 seconds
-const REMOVED_SEGMENT_TTL = 1 * 60 * 1000; // 60 seconds
+const DEFAULT_LIVE_WINDOW_SIZE = parseInt(process.env.DEFAULT_LIVE_WINDOW_SIZE) || 2 * 60; // 120 seconds
+const REMOVED_SEGMENT_TTL = parseInt(process.env.REMOVED_SEGMENT_TTL) || 1 * 60 * 1000; // 60 seconds
 
 type ManifestTask = {
   fileName: string;
@@ -177,7 +177,7 @@ export class Session {
 
   /** PRIVATE FUNCTUIONS */
 
-  async _RunEventQueue() {
+  private async _RunEventQueue() {
     this.eventQueueHasStopped = false;
     while (this.eventQueue.length > 0) {
       const eventData = this.eventQueue.shift();
@@ -186,11 +186,11 @@ export class Session {
     this.eventQueueHasStopped = true;
   }
 
-  async _ProcessEventData(data: any) {
+  private async _ProcessEventData(data: any) {
     if (data.type === PlaylistType.EVENT && !this.sourceIsEvent) {
       this.sourceIsEvent = true;
     } else if (data.type === PlaylistType.LIVE && this.targetWindowSize === -1) {
-      this.targetWindowSize = LIVE_WINDOW_SIZE; // Default to 2 minutes if source HLS steam is type LIVE.
+      this.targetWindowSize = DEFAULT_LIVE_WINDOW_SIZE; // Default to 2 minutes if source HLS steam is type LIVE.
     }
     if (data.cookieJar) {
       this.cookieJar = data.cookieJar;
@@ -288,16 +288,11 @@ export class Session {
             `[${this.sessionId}]: Recorders internal discontinuity-sequence count now at: [ ${this.m3uPlaylistData.dseq} ]`
           );
         }
-        // - Delete Removed Segments via Plugin Delete function if any
+        // Delete Removed Segments via Plugin Delete function if implemented
         if (segRemovalData.removedSegmentsList.length > 0 && this.segRemovalQueue) {
-          // - Push newly removed seglist to global segment Graveyard
           this.segmentGraveyard = this.segmentGraveyard.concat(segRemovalData.removedSegmentsList);
-          let gy_size_before = this.segmentGraveyard.length;
-          // - Delete Segments from Destination if their Graveyard TTL has expired
           await this._DeleteOlderSegments();
           debug(`[${this.sessionId}]: Finished deleting all segments at output destination!`);
-          let gy_size_after = this.segmentGraveyard.length;
-          console.log(`GY SIZE BEFORE: ${gy_size_before} -> GY AFTER: ${gy_size_after}`);
         }
       }
       this.m3uPlaylistData.targetDur = this._getTargetDuration(this.collectedSegments);
@@ -328,7 +323,7 @@ export class Session {
     this.atFirstIncrement = false;
   }
 
-  _getSourcePlaylistType() {
+  private _getSourcePlaylistType() {
     if (this.hlsrecorder) {
       let typeEnum = this.hlsrecorder.sourcePlaylistType;
       switch (typeEnum) {
@@ -346,15 +341,15 @@ export class Session {
     }
   }
 
-  async _DeleteOlderSegments(): Promise<void> {
-    // - Depending on time, get new list of segments to be deleted
+  private async _DeleteOlderSegments(): Promise<void> {
+    // Depending on TTL, get new list of segments to be deleted
     const segmentsToDelete: string[] = this.segmentGraveyard
       .filter((segItem) => Date.now() >= segItem.timeOfRemoval + REMOVED_SEGMENT_TTL)
       .map((segItem) => segItem.segmentFileName);
-    // - Run Deletion Jobs if any
+
     if (segmentsToDelete.length > 0) {
       let tasksRemoval = await this._RemoveAllSegments(this.segRemovalQueue, segmentsToDelete);
-      // Let the Workers Work!
+
       const resultsDelete = [];
       for (let result of tasksRemoval) {
         resultsDelete.push(await result);
@@ -362,14 +357,14 @@ export class Session {
       const successfullyDeletedSegments: string[] = segmentsToDelete.filter(
         (_, index) => resultsDelete[index]
       );
-      // - permanently delete segments from graveyard
+      // Permanently delete segments from graveyard
       this.segmentGraveyard = this.segmentGraveyard.filter(
         (segItem) => !successfullyDeletedSegments.includes(segItem.segmentFileName)
       );
     }
   }
 
-  _RemoveUnreachableSegments = (failedIndexes, Segments) => {
+  private _RemoveUnreachableSegments = (failedIndexes, Segments) => {
     for (let i = 0; i < failedIndexes.length; i++) {
       const bandwidths = Object.keys(Segments["video"]);
       const audioGroups = Object.keys(Segments["audio"]);
@@ -411,7 +406,7 @@ export class Session {
     }
   };
 
-  _getLatestSegmentIndex(segments: ISegments): number {
+  private _getLatestSegmentIndex(segments: ISegments): number {
     let endIndex: number;
     if (Object.keys(segments["video"]).length > 0) {
       const bandwidths: string[] = Object.keys(segments["video"]);
@@ -424,7 +419,7 @@ export class Session {
     return -1;
   }
 
-  async _UploadAllSegments(taskQueue: queueAsPromised<SegmentTask>, segments: ISegments): Promise<any[]> {
+  private async _UploadAllSegments(taskQueue: queueAsPromised<SegmentTask>, segments: ISegments): Promise<any[]> {
     const tasks = [];
     const bandwidths = Object.keys(segments["video"]);
     const groupsAudio = Object.keys(segments["audio"]);
@@ -499,7 +494,7 @@ export class Session {
     return tasks;
   }
 
-  async _RemoveAllSegments(taskQueue: queueAsPromised<SegmentRemovalTask>, fileNameList: string[]) {
+  private async _RemoveAllSegments(taskQueue: queueAsPromised<SegmentRemovalTask>, fileNameList: string[]) {
     const tasks = [];
     fileNameList.forEach((name) => {
       let item: SegmentRemovalTask = {
@@ -511,7 +506,7 @@ export class Session {
     return tasks;
   }
 
-  async _UploadAllManifest(
+  private async _UploadAllManifest(
     taskQueue: queueAsPromised<ManifestTask>,
     segments: ISegments,
     m3uPlaylistData: { mseq: number; dseq: number; targetDur: number },
@@ -606,7 +601,7 @@ export class Session {
     return tasks;
   }
 
-  _PushSegments = (Segments: ISegments, newSegments: ISegments): void => {
+  private _PushSegments = (Segments: ISegments, newSegments: ISegments): void => {
     const bandwidths = Object.keys(newSegments["video"]);
     const groupsAudio = Object.keys(newSegments["audio"]);
     const groupsSubs = Object.keys(newSegments["subtitle"]);
@@ -736,7 +731,7 @@ export class Session {
     }
   };
 
-  _AdjustForWindowSize(Segments: ISegments): {
+  private _AdjustForWindowSize(Segments: ISegments): {
     segmentsReleased: number;
     discontinuityTagsReleased: number;
     removedSegmentsList: IRemovedSegment[];
@@ -804,7 +799,7 @@ export class Session {
     return output;
   }
 
-  _getTargetDuration(Segments: ISegments): number {
+  private _getTargetDuration(Segments: ISegments): number {
     let maxDuration = 0;
     const bandwidths = Object.keys(Segments["video"]);
     if (bandwidths.length > 0) {
