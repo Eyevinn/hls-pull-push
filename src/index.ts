@@ -5,6 +5,7 @@ import { ILogger } from "../types/index";
 import { AbstractLogger } from "./logger";
 export { MediaPackageOutput } from "../output_plugins/mediapackage";
 export { S3BucketOutput } from "../output_plugins/s3bucket";
+export { VoidOutput } from "../output_plugins/void";
 
 import api from "./api";
 
