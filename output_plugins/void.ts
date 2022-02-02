@@ -11,9 +11,6 @@ require("dotenv").config();
 
 export class VoidOutput implements IOutputPlugin {
   createOutputDestination(opts: any, logger: ILogger): IOutputPluginDest {
-    if (!opts.bucket || !opts.folder) {
-      throw new Error("Payload Missing 'bucket' or 'folder' parameter");
-    }
     return new VoidOutputDestination(opts, logger);
   }
 
