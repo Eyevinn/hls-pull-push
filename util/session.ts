@@ -12,6 +12,7 @@ import {
 import { IOutputPluginDest } from "../types/output_plugin";
 const debug = require("debug")("hls-pull-push");
 
+const HLSRECORDER_RESTART_ON_ERROR = process.env.HLSRECORDER_RESTART_ON_ERROR === "true";
 const DEFAULT_LIVE_WINDOW_SIZE = parseInt(process.env.DEFAULT_LIVE_WINDOW_SIZE) || 2 * 60; // 120 seconds
 const REMOVED_SEGMENT_TTL = parseInt(process.env.REMOVED_SEGMENT_TTL) || 1 * 60 * 1000; // 60 seconds
 
@@ -137,9 +138,19 @@ export class Session {
       }
     });
 
-    this.hlsrecorder.on("error", (err) => {
+    this.hlsrecorder.on("error", async (err) => {
       debug(`[${this.sessionId}]: Error from HLS Recorder! ${err}`);
-      this.StopHLSRecorder();
+      if (HLSRECORDER_RESTART_ON_ERROR) {
+        this.StopHLSRecorder();
+      } else {
+        const timer = (ms: number): Promise<void> => {
+          return new Promise((res) => setTimeout(res, ms));
+        };
+        debug(`[${this.sessionId}]: Restarting HLS Recorder! ${err}`);
+        await this.hlsrecorder.stop();
+        await timer(2000);
+        this.hlsrecorder.start();
+      }
     });
     // Start Recording the HLS stream
     this.hlsrecorder.start();
