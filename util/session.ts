@@ -12,6 +12,7 @@ import {
 import { IOutputPluginDest } from "../types/output_plugin";
 const debug = require("debug")("hls-pull-push");
 
+const HLSRECORDER_RESTART_ON_ERROR = process.env.HLSRECORDER_RESTART_ON_ERROR === "true";
 const DEFAULT_LIVE_WINDOW_SIZE = parseInt(process.env.DEFAULT_LIVE_WINDOW_SIZE) || 2 * 60; // 120 seconds
 const REMOVED_SEGMENT_TTL = parseInt(process.env.REMOVED_SEGMENT_TTL) || 1 * 60 * 1000; // 60 seconds
 
@@ -137,9 +138,19 @@ export class Session {
       }
     });
 
-    this.hlsrecorder.on("error", (err) => {
+    this.hlsrecorder.on("error", async (err) => {
       debug(`[${this.sessionId}]: Error from HLS Recorder! ${err}`);
-      this.StopHLSRecorder();
+      if (HLSRECORDER_RESTART_ON_ERROR) {
+        this.StopHLSRecorder();
+      } else {
+        const timer = (ms: number): Promise<void> => {
+          return new Promise((res) => setTimeout(res, ms));
+        };
+        debug(`[${this.sessionId}]: Restarting HLS Recorder! ${err}`);
+        await this.hlsrecorder.stop();
+        await timer(2000);
+        this.hlsrecorder.start();
+      }
     });
     // Start Recording the HLS stream
     this.hlsrecorder.start();
@@ -206,7 +217,11 @@ export class Session {
     if (!this.masterM3U8) {
       try {
         debug(`[${this.sessionId}]: Trying to upload multivariant manifest...`);
-        this.masterM3U8 = this.hlsrecorder.masterManifest.replace(/master/g, "channel_");
+        this.masterM3U8 = this.hlsrecorder.masterManifest
+          .replace(/\_/g, "-")
+          .replace(/master-audiotrack-/g, "audio/channel_")
+          .replace(/master-subtrack-/g, "subtitle/channel_")
+          .replace(/master/g, "channel_");
         if (this.masterM3U8 !== "") {
           let result = await this.outputDestination.uploadMediaPlaylist({
             fileName: "channel.m3u8",
@@ -419,7 +434,10 @@ export class Session {
     return -1;
   }
 
-  private async _UploadAllSegments(taskQueue: queueAsPromised<SegmentTask>, segments: ISegments): Promise<any[]> {
+  private async _UploadAllSegments(
+    taskQueue: queueAsPromised<SegmentTask>,
+    segments: ISegments
+  ): Promise<any[]> {
     const tasks = [];
     const bandwidths = Object.keys(segments["video"]);
     const groupsAudio = Object.keys(segments["audio"]);
@@ -441,10 +459,6 @@ export class Session {
         }
       });
     }
-    /* 
-    
-    TODO: Support Multi-tracks
-    
     // For Demux Audio
     if (groupsAudio.length > 0) {
       // Start pushing segments for all variants before moving on the next
@@ -457,9 +471,12 @@ export class Session {
             const lang = languages[k];
             const segmentUri = segments["audio"][group][lang].segList[i].uri;
             if (segmentUri) {
+              // Design of the File Name here:
+              const sourceFileExtension = new URL(segmentUri).pathname.split(".").pop();
+              const segmentFileName = `${group}/${lang}/channel_${group}-${lang}_${segments["audio"][group][lang].segList[i].index}.${sourceFileExtension}`;
               let item = {
-                mp_endpoints: endpoints,
-                segment_uri: segmentUri,
+                uri: segmentUri,
+                fileName: segmentFileName,
               };
               tasks.push(taskQueue.push(item));
             }
@@ -479,9 +496,12 @@ export class Session {
             const lang = languages[k];
             const segmentUri = segments["subtitle"][group][lang].segList[i].uri;
             if (segmentUri) {
+              // Design of the File Name here:
+              const sourceFileExtension = new URL(segmentUri).pathname.split(".").pop();
+              const segmentFileName = `${group}/${lang}/channel_${group}-${lang}_${segments["subtitle"][group][lang].segList[i].index}.${sourceFileExtension}`;
               let item = {
-                mp_endpoints: endpoints,
-                segment_uri: segmentUri,
+                uri: segmentUri,
+                fileName: segmentFileName,
               };
               tasks.push(taskQueue.push(item));
             }
@@ -489,7 +509,6 @@ export class Session {
         });
       }
     }
-    */
 
     return tasks;
   }
@@ -545,29 +564,36 @@ export class Session {
         tasks.push(taskQueue.push(item));
       });
     });
-    /*
-
-    TODO: Support Multi-tracks
-
     // For Demux Audio
     if (groupsAudio.length > 0) {
-      groupsAudio.forEach(async (group) => {
+      groupsAudio.forEach(async (group, gi) => {
         const languages = Object.keys(segments["audio"][group]);
         for (let k = 0; k < languages.length; k++) {
           const lang = languages[k];
-      let generatorOptions = {
-        mseq: m3uPlaylistData.mseq,
-        dseq: m3uPlaylistData.dseq,
-        targetDuration: m3uPlaylistData.targetDur,
-        allSegments: segments,
-      };
-          GenerateAudioM3U8(group, lang, generatorOptions).then((playlistM3u8) => {
-            const name = `master-audio_${group}_${lang}`;
+          let generatorOptions = {
+            mseq: m3uPlaylistData.mseq,
+            dseq: m3uPlaylistData.dseq,
+            targetDuration: m3uPlaylistData.targetDur,
+            allSegments: segments,
+          };
+          GenerateAudioM3U8(group, lang, generatorOptions).then((playlistM3u8: string) => {
+            const playlistToBeUploaded: string = playlistM3u8.replace(/master/g, "channel");
+            let name;
+            if (multiVariantExists) {
+              name = `audio/channel_${group}-${lang}.m3u8`;
+            } else {
+              name = "channel.m3u8";
+            }
             let item = {
-              mp_endpoints: endpoints,
-              file_name: name,
-              data: playlistM3u8,
+              fileName: name,
+              fileData: playlistToBeUploaded,
             };
+
+            // For Debugging
+            if (gi === 0 && k === 0) {
+              debug(playlistToBeUploaded);
+            }
+
             tasks.push(taskQueue.push(item));
           });
         }
@@ -575,29 +601,39 @@ export class Session {
     }
     // For Subtitles
     if (groupsSubs.length > 0) {
-      groupsSubs.forEach(async (group) => {
+      groupsSubs.forEach(async (group, gi) => {
         const languages = Object.keys(segments["subtitle"][group]);
         for (let k = 0; k < languages.length; k++) {
           const lang = languages[k];
-      let generatorOptions = {
-        mseq: m3uPlaylistData.mseq,
-        dseq: m3uPlaylistData.dseq,
-        targetDuration: m3uPlaylistData.targetDur,
-        allSegments: segments,
-      };
+          let generatorOptions = {
+            mseq: m3uPlaylistData.mseq,
+            dseq: m3uPlaylistData.dseq,
+            targetDuration: m3uPlaylistData.targetDur,
+            allSegments: segments,
+          };
           GenerateSubtitleM3U8(group, lang, generatorOptions).then((playlistM3u8) => {
-            const name = `master-sub_${group}_${lang}`;
+            const playlistToBeUploaded: string = playlistM3u8.replace(/master/g, "channel");
+            let name;
+            if (multiVariantExists) {
+              name = `subtitle/channel_${group}-${lang}.m3u8`;
+            } else {
+              name = "channel.m3u8";
+            }
             let item = {
-              mp_endpoints: endpoints,
-              file_name: name,
-              data: playlistM3u8,
+              fileName: name,
+              fileData: playlistToBeUploaded,
             };
+
+            // For Debugging
+            if (gi === 0 && k === 0) {
+              debug(playlistToBeUploaded);
+            }
+
             tasks.push(taskQueue.push(item));
           });
         }
       });
     }
-    */
     return tasks;
   }
 
@@ -683,7 +719,9 @@ export class Session {
               } else {
                 segInfo = `other hls tag`;
               }
-              debug(`[${this.sessionId}]: Added Segments(${segInfo}) to Cache-HLS Playlist_${group}-${lang}`);
+              debug(
+                `[${this.sessionId}]: (aud) Added Segments(${segInfo}) to Cache-HLS Playlist_${group}-${lang}`
+              );
             }
           }
         });
@@ -723,7 +761,9 @@ export class Session {
               } else {
                 segInfo = `other hls tag`;
               }
-              debug(`[${this.sessionId}]: Added Segments(${segInfo}) to Cache-HLS Playlist_${group}-${lang}`);
+              debug(
+                `[${this.sessionId}]: (sub) Added Segments(${segInfo}) to Cache-HLS Playlist_${group}-${lang}`
+              );
             }
           }
         });
@@ -764,7 +804,7 @@ export class Session {
         }
         if (index === 0) {
           if (releasedSegmentItem?.duration) {
-            // Reduce current window size...
+            // Reduce current window size... and assume that audio and sub tracks are aligned.
             this.currentWindowSize -= releasedSegmentItem?.duration ? releasedSegmentItem.duration : 0;
             output.segmentsReleased++;
           }
@@ -773,15 +813,21 @@ export class Session {
           }
         }
       });
-      /* TODO: Support MultiTrack
-
-      
       // Shifting on all audio lists
       groups.forEach((group) => {
         const langs = Object.keys(Segments["audio"][group]);
         for (let i = 0; i < langs.length; i++) {
           let lang = langs[i];
           const releasedSegmentItem = Segments["audio"][group][lang].segList.shift();
+          if (releasedSegmentItem?.uri) {
+            const sourceFileExtension = new URL(releasedSegmentItem?.uri).pathname.split(".").pop();
+            const segmentFileName = `audio/${group}/${lang}/channel_${group}-${lang}_${releasedSegmentItem.index}.${sourceFileExtension}`;
+            const removedItem: IRemovedSegment = {
+              segmentFileName: segmentFileName,
+              timeOfRemoval: Date.now(),
+            };
+            output.removedSegmentsList.push(removedItem);
+          }
         }
       });
       // Shifting on all subtitle lists
@@ -790,10 +836,17 @@ export class Session {
         for (let i = 0; i < langs.length; i++) {
           let lang = langs[i];
           const releasedSegmentItem = Segments["subtitle"][group][lang].segList.shift();
+          if (releasedSegmentItem?.uri) {
+            const sourceFileExtension = new URL(releasedSegmentItem?.uri).pathname.split(".").pop();
+            const segmentFileName = `subtitle/${group}/${lang}/channel_${group}-${lang}_${releasedSegmentItem.index}.${sourceFileExtension}`;
+            const removedItem: IRemovedSegment = {
+              segmentFileName: segmentFileName,
+              timeOfRemoval: Date.now(),
+            };
+            output.removedSegmentsList.push(removedItem);
+          }
         }
       });
-
-      */
     }
 
     return output;

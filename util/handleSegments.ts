@@ -112,7 +112,7 @@ export const ReplaceSegmentURLs = (segments: ISegments): ISegments => {
         for (let i = 0; i < segListSize; i++) {
           const segmentUri = segments["audio"][group][lang].segList[i].uri;
           if (segmentUri) {
-            const replacementUrl = `channel_a-${group}-${lang}_${segments["audio"][group][lang].segList[i].index}.ts`; // assuming input is MPEG TS-file.
+            const replacementUrl = `audio/${group}/${lang}/channel_${group}-${lang}_${segments["audio"][group][lang].segList[i].index}.ts`; // assuming input is MPEG TS-file.
             segments["audio"][group][lang].segList[i].uri = replacementUrl;
           }
         }
@@ -129,7 +129,7 @@ export const ReplaceSegmentURLs = (segments: ISegments): ISegments => {
         for (let i = 0; i < segListSize; i++) {
           const segmentUri = segments["subtitle"][group][lang].segList[i].uri;
           if (segmentUri) {
-            const replacementUrl = `channel_s-${group}-${lang}_${segments["subtitle"][group][lang].segList[i].index}.ts`; // assuming input is MPEG TS-file.
+            const replacementUrl = `subtitle/${group}/${lang}/channel_${group}-${lang}_${segments["subtitle"][group][lang].segList[i].index}.ts`; // assuming input is MPEG TS-file.
             segments["subtitle"][group][lang].segList[i].uri = replacementUrl;
           }
         }
