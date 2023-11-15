@@ -314,6 +314,7 @@ export class Session {
         // Make Segment Urls formatted and ready for Manifest Generation
         SegmentsWithNewURL = ReplaceSegmentURLs(this.collectedSegments);
         // Upload Recording Playlist Manifest to S3 Bucket
+        debug(`[${this.sessionId}]: SEGMENT URL RENAME MAP:`);
         let tasksManifest = await this._UploadAllManifest(
           this.m3u8Queue,
           SegmentsWithNewURL,
@@ -429,8 +430,10 @@ export class Session {
     }
     return -1;
   }
-
-  private async _UploadAllSegments(taskQueue: queueAsPromised<SegmentTask>, segments: ISegments): Promise<any[]> {
+  private async _UploadAllSegments(
+    taskQueue: queueAsPromised<SegmentTask>,
+    segments: ISegments
+  ): Promise<any[]> {
     const tasks = [];
     const bandwidths = Object.keys(segments["video"]);
     const groupsAudio = Object.keys(segments["audio"]);
@@ -501,7 +504,6 @@ export class Session {
       }
     }
     */
-
     return tasks;
   }
 
@@ -557,9 +559,7 @@ export class Session {
       });
     });
     /*
-
     TODO: Support Multi-tracks
-
     // For Demux Audio
     if (groupsAudio.length > 0) {
       groupsAudio.forEach(async (group) => {
@@ -590,12 +590,12 @@ export class Session {
         const languages = Object.keys(segments["subtitle"][group]);
         for (let k = 0; k < languages.length; k++) {
           const lang = languages[k];
-      let generatorOptions = {
-        mseq: m3uPlaylistData.mseq,
-        dseq: m3uPlaylistData.dseq,
-        targetDuration: m3uPlaylistData.targetDur,
-        allSegments: segments,
-      };
+          let generatorOptions = {
+            mseq: m3uPlaylistData.mseq,
+            dseq: m3uPlaylistData.dseq,
+            targetDuration: m3uPlaylistData.targetDur,
+            allSegments: segments,
+          };
           GenerateSubtitleM3U8(group, lang, generatorOptions).then((playlistM3u8) => {
             const name = `master-sub_${group}_${lang}`;
             let item = {
@@ -785,7 +785,6 @@ export class Session {
         }
       });
       /* TODO: Support MultiTrack
-
       
       // Shifting on all audio lists
       groups.forEach((group) => {
@@ -803,7 +802,6 @@ export class Session {
           const releasedSegmentItem = Segments["subtitle"][group][lang].segList.shift();
         }
       });
-
       */
     }
 
