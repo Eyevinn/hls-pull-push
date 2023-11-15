@@ -112,7 +112,8 @@ export const ReplaceSegmentURLs = (segments: ISegments): ISegments => {
         for (let i = 0; i < segListSize; i++) {
           const segmentUri = segments["audio"][group][lang].segList[i].uri;
           if (segmentUri) {
-            const replacementUrl = `audio/${group}/${lang}/channel_${group}-${lang}_${segments["audio"][group][lang].segList[i].index}.ts`; // assuming input is MPEG TS-file.
+            const replacementUrl = `channel_a-${group}-${lang}_${segments["audio"][group][lang].segList[i].index}.aac`; // assuming input is AAC.
+            //const replacementUrl = `audio/${group}/${lang}/channel_${group}-${lang}_${segments["audio"][group][lang].segList[i].index}.aac`; // assuming input is AAC.
             segments["audio"][group][lang].segList[i].uri = replacementUrl;
           }
         }
@@ -129,7 +130,8 @@ export const ReplaceSegmentURLs = (segments: ISegments): ISegments => {
         for (let i = 0; i < segListSize; i++) {
           const segmentUri = segments["subtitle"][group][lang].segList[i].uri;
           if (segmentUri) {
-            const replacementUrl = `subtitle/${group}/${lang}/channel_${group}-${lang}_${segments["subtitle"][group][lang].segList[i].index}.ts`; // assuming input is MPEG TS-file.
+            const replacementUrl = `channel_s-${group}-${lang}_${segments["subtitle"][group][lang].segList[i].index}.vtt`; // assuming input is WEBVTT.
+            //const replacementUrl = `subtitle/${group}/${lang}/channel_${group}-${lang}_${segments["subtitle"][group][lang].segList[i].index}.vtt`; // assuming input is WEBVTT.
             segments["subtitle"][group][lang].segList[i].uri = replacementUrl;
           }
         }
