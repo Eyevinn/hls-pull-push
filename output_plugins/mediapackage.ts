@@ -1,6 +1,7 @@
 import { ILocalFileUpload, IOutputPlugin, IOutputPluginDest, IRemoteFileUpload } from "../types/output_plugin";
 import { ILogger } from "../types/index";
 import { AuthType, createClient, WebDAVClient } from "webdav";
+import { URL } from 'url';
 import fetch from "node-fetch";
 
 const { AbortController } = require("abort-controller");
