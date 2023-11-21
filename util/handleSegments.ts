@@ -83,7 +83,7 @@ export const GetOnlyNewestSegments = (
   return newestSegments;
 };
 
-/* These URLs will be what is written in the playlist manifest we later generate */
+/* Generate mapings of URLs to file names, will be used for writing playlist manifests and handling the files */
 export const GenerateSegmentNameMap = (segments: ISegments): Map<string, string> => {
 
   const nameMap = new Map<string, string>();
