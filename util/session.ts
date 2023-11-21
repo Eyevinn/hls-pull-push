@@ -223,7 +223,8 @@ export class Session {
           .replaceAll("_", "-")
           .replaceAll("master-audiotrack-", "channel_a-")
           .replaceAll("master-subtrack-", "channel_s-")
-          .replaceAll("master", "channel_");
+          .replaceAll("master", "channel_")
+          .replaceAll("channel_a-audio-", "channel_a-audio_");
 
         if (this.masterM3U8 !== "") {
           let result = await this.outputDestination.uploadMediaPlaylist({
