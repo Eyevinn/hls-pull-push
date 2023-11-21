@@ -217,7 +217,7 @@ export class Session {
     if (!this.masterM3U8) {
       try {
         debug(`[${this.sessionId}]: Trying to upload multivariant manifest...`);
-        this.masterM3U8 = this.hlsrecorder.masterManifest.replace(/master/g, "channel_");
+        this.masterM3U8 = this.hlsrecorder.masterManifest.replaceAll("master", "channel_");
         if (this.masterM3U8 !== "") {
           let result = await this.outputDestination.uploadMediaPlaylist({
             fileName: "channel.m3u8",
@@ -538,7 +538,7 @@ export class Session {
         allSegments: segments,
       };
       GenerateMediaM3U8(parseInt(bw), generatorOptions).then((playlistM3u8: string) => {
-        const playlistToBeUploaded: string = playlistM3u8.replace(/master/g, "channel");
+        const playlistToBeUploaded: string = playlistM3u8.replaceAll("master", "channel");
         let name;
         if (multiVariantExists) {
           name = `channel_${bw}.m3u8`;
