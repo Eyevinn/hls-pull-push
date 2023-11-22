@@ -100,7 +100,7 @@ export const GenerateSegmentNameMap = (segments: ISegments): Map<string, string>
       const segmentUri: string = segments["video"][bw].segList[i].uri;
       if (segmentUri) {
         const fileExtension = ".ts" // assuming input is MPEG TS-file.
-        const fileName = `channel_${bw}_${segments["video"][bw].segList[i].index}${fileExtension}`
+        const fileName = `channel_${bw}-${segments["video"][bw].segList[i].index}${fileExtension}`
         nameMap.set(segmentUri, fileName);
       }
     }
@@ -116,7 +116,7 @@ export const GenerateSegmentNameMap = (segments: ISegments): Map<string, string>
           const segmentUri = segments["audio"][group][lang].segList[i].uri;
           if (segmentUri) {
             const fileExtension = ".aac" // assuming input is AAC.
-            const fileName = `channel_a-${group}-${lang}_${segments["audio"][group][lang].segList[i].index}${fileExtension}`;
+            const fileName = `channel_a-${group.replaceAll("_", "-")}-${lang}-${segments["audio"][group][lang].segList[i].index}${fileExtension}`;
             nameMap.set(segmentUri, fileName);
           }
         }
@@ -134,7 +134,7 @@ export const GenerateSegmentNameMap = (segments: ISegments): Map<string, string>
           const segmentUri = segments["subtitle"][group][lang].segList[i].uri;
           if (segmentUri) {
             const fileExtension = ".vtt" // assuming input is WEBVTT.
-            const fileName = `channel_s-${group}-${lang}_${segments["subtitle"][group][lang].segList[i].index}${fileExtension}`;
+            const fileName = `channel_s-${group.replaceAll("_", "-")}-${lang}-${segments["subtitle"][group][lang].segList[i].index}${fileExtension}`;
             nameMap.set(segmentUri, fileName);
           }
         }

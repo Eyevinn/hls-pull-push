@@ -223,8 +223,7 @@ export class Session {
           .replaceAll("_", "-")
           .replaceAll("master-audiotrack-", "channel_a-")
           .replaceAll("master-subtrack-", "channel_s-")
-          .replaceAll("master", "channel_")
-          .replaceAll("channel_a-audio-", "channel_a-audio_");
+          .replaceAll("master", "channel_");
 
         if (this.masterM3U8 !== "") {
           let result = await this.outputDestination.uploadMediaPlaylist({
@@ -574,7 +573,7 @@ export class Session {
             const playlistToBeUploaded: string = playlistM3u8.replace("master", "channel");
             let name: string;
             if (multiVariantExists) {
-              name = `channel_a-${group}-${lang}.m3u8`;
+              name = `channel_a-${group.replaceAll("_", "-")}-${lang}.m3u8`;
             } else {
               name = "channel.m3u8";
             }
@@ -609,7 +608,7 @@ export class Session {
             const playlistToBeUploaded: string = playlistM3u8.replace("master", "channel");
             let name: string;
             if (multiVariantExists) {
-              name = `channel_s-${group}-${lang}.m3u8`;
+              name = `channel_s-${group.replaceAll("_", "-")}-${lang}.m3u8`;
             } else {
               name = "channel.m3u8";
             }
@@ -815,7 +814,7 @@ export class Session {
           const releasedSegmentItem = segments.audio[group][lang].segList.shift();
           if (releasedSegmentItem?.uri) {
             const fileExtension = ".aac" // assuming input is AAC.
-            const segmentFileName = `channel_a-${group}-${lang}_${releasedSegmentItem.index}${fileExtension}`;
+            const segmentFileName = `channel_a-${group.replaceAll("_", "-")}-${lang}-${releasedSegmentItem.index}${fileExtension}`;
             const removedItem: IRemovedSegment = {
               segmentFileName: segmentFileName,
               timeOfRemoval: Date.now(),
@@ -832,7 +831,7 @@ export class Session {
           const releasedSegmentItem = segments.subtitle[group][lang].segList.shift();
           if (releasedSegmentItem?.uri) {
             const sourceFileExtension = path.extname(new URL(releasedSegmentItem.uri).pathname);
-            const segmentFileName = `channel_s-${group}-${lang}_${releasedSegmentItem.index}${sourceFileExtension}`;
+            const segmentFileName = `channel_s-${group.replaceAll("_", "-")}-${lang}-${releasedSegmentItem.index}${sourceFileExtension}`;
             const removedItem: IRemovedSegment = {
               segmentFileName: segmentFileName,
               timeOfRemoval: Date.now(),
