@@ -84,9 +84,12 @@ export const GetOnlyNewestSegments = (
 };
 
 /* Generate mapings of URLs to file names, will be used for writing playlist manifests and handling the files */
-export const GenerateSegmentNameMap = (segments: ISegments): Map<string, string> => {
+export function GenerateRenamedSegments(segments: ISegments): {
+  renamedSegments: ISegments,
+  uriToFilenameMap: Map<string, string>,
+} {
 
-  const nameMap = new Map<string, string>();
+  const uriToFilenameMap = new Map<string, string>();
   // Before altering key values - Make deep copy.
   segments = JSON.parse(JSON.stringify(segments));
 
@@ -97,11 +100,12 @@ export const GenerateSegmentNameMap = (segments: ISegments): Map<string, string>
   bandwidths.forEach((bw) => {
     let segListSize = segments["video"][bw].segList.length;
     for (let i = 0; i < segListSize; i++) {
-      const segmentUri: string = segments["video"][bw].segList[i].uri;
-      if (segmentUri) {
+      const segment = segments["video"][bw].segList[i];
+      if (segment.uri) {
         const fileExtension = ".ts" // assuming input is MPEG TS-file.
         const fileName = `channel_${bw}-${segments["video"][bw].segList[i].index}${fileExtension}`
-        nameMap.set(segmentUri, fileName);
+        uriToFilenameMap.set(segment.uri, fileName);
+        segment.uri = fileName;
       }
     }
   });
@@ -113,11 +117,12 @@ export const GenerateSegmentNameMap = (segments: ISegments): Map<string, string>
         const lang = languages[k];
         let segListSize = segments["audio"][group][lang].segList.length;
         for (let i = 0; i < segListSize; i++) {
-          const segmentUri = segments["audio"][group][lang].segList[i].uri;
-          if (segmentUri) {
+          const segment = segments["audio"][group][lang].segList[i];
+          if (segment.uri) {
             const fileExtension = ".aac" // assuming input is AAC.
-            const fileName = `channel_a-${group.replaceAll("_", "-")}-${lang}-${segments["audio"][group][lang].segList[i].index}${fileExtension}`;
-            nameMap.set(segmentUri, fileName);
+            const fileName = `channel_a-${group.replaceAll("_", "-")}-${lang}-${segments.audio[group][lang].segList[i].index}${fileExtension}`;
+            uriToFilenameMap.set(segment.uri, fileName);
+            segment.uri = fileName;
           }
         }
       }
@@ -131,16 +136,17 @@ export const GenerateSegmentNameMap = (segments: ISegments): Map<string, string>
         const lang = languages[k];
         let segListSize = segments["subtitle"][group][lang].segList.length;
         for (let i = 0; i < segListSize; i++) {
-          const segmentUri = segments["subtitle"][group][lang].segList[i].uri;
-          if (segmentUri) {
+          const segment = segments["subtitle"][group][lang].segList[i];
+          if (segment.uri) {
             const fileExtension = ".vtt" // assuming input is WEBVTT.
-            const fileName = `channel_s-${group.replaceAll("_", "-")}-${lang}-${segments["subtitle"][group][lang].segList[i].index}${fileExtension}`;
-            nameMap.set(segmentUri, fileName);
+            const fileName = `channel_s-${group.replaceAll("_", "-")}-${lang}-${segments.subtitle[group][lang].segList[i].index}${fileExtension}`;
+            uriToFilenameMap.set(segment.uri, fileName);
+            segment.uri = fileName;
           }
         }
       }
     });
   }
-  return nameMap;
+  return { renamedSegments: segments, uriToFilenameMap };
 };
 

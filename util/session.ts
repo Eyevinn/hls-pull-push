@@ -3,7 +3,7 @@ import clone from "clone";
 import { HLSRecorder, ISegments, PlaylistType, Segment } from "@eyevinn/hls-recorder";
 import { promise as fastq } from "fastq";
 import type { queueAsPromised } from "fastq";
-import { GenerateSegmentNameMap, GetOnlyNewestSegments } from "../util/handleSegments";
+import { GenerateRenamedSegments, GetOnlyNewestSegments } from "../util/handleSegments";
 import {
   GenerateAudioM3U8,
   GenerateMediaM3U8,
@@ -266,7 +266,9 @@ export class Session {
     let SegmentsWithNewURL: ISegments;
     let tasksSegments: any[];
     try {
-      tasksSegments = await this._UploadAllSegments(this.segQueue, BottomSegs);
+      const { uriToFilenameMap, renamedSegments } = GenerateRenamedSegments(BottomSegs);
+      SegmentsWithNewURL = renamedSegments;
+      tasksSegments = await this._UploadAllSegments(this.segQueue, BottomSegs, uriToFilenameMap);
       // Let the Workers Work!
       const resultsSegments = [];
       for (let result of tasksSegments) {
@@ -321,7 +323,7 @@ export class Session {
         // Upload Recording Playlist Manifest to S3 Bucket
         let tasksManifest = await this._UploadAllManifest(
           this.m3u8Queue,
-          this.collectedSegments,
+          SegmentsWithNewURL,
           this.m3uPlaylistData,
           this.masterM3U8 !== ""
         );
@@ -437,9 +439,9 @@ export class Session {
 
   private async _UploadAllSegments(
     taskQueue: queueAsPromised<SegmentTask>,
-    segments: ISegments
+    segments: ISegments,
+    uriToFilenameMap: Map<string, string>
   ): Promise<any[]> {
-    const nameMap = GenerateSegmentNameMap(segments);
     const tasks = [];
     const bandwidths = Object.keys(segments.video);
     const groupsAudio = Object.keys(segments.audio);
@@ -452,7 +454,7 @@ export class Session {
         if (segmentUri) {
           let item = {
             uri: segmentUri,
-            fileName: nameMap.get(segmentUri),
+            fileName: uriToFilenameMap.get(segmentUri),
           };
           tasks.push(taskQueue.push(item));
         }
@@ -472,7 +474,7 @@ export class Session {
             if (segmentUri) {
               let item = {
                 uri: segmentUri,
-                fileName: nameMap.get(segmentUri),
+                fileName: uriToFilenameMap.get(segmentUri),
               };
               tasks.push(taskQueue.push(item));
             }
@@ -494,7 +496,7 @@ export class Session {
             if (segmentUri) {
               let item = {
                 uri: segmentUri,
-                fileName: nameMap.get(segmentUri),
+                fileName: uriToFilenameMap.get(segmentUri),
               };
               tasks.push(taskQueue.push(item));
             }
