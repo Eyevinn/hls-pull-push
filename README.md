@@ -61,7 +61,7 @@ Example S3:
   "url": "https://demo.vc.eyevinn.technology/channels/eyevinn/master.m3u8",
   "output": "s3",
   "payload": {
-    "bucket": "test-live-output",
+    "bucket": "lab-live-output",
     "folder": "S3_PLUGIN_CONTENT",
   },
 }

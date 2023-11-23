@@ -2,6 +2,7 @@
 // Helper Functions
 // ********************/
 import { ISegments } from "@eyevinn/hls-recorder";
+import { extraTracksMapper, getMapperKey } from "./session";
 const debug = require("debug")("hls-pull-push");
 /**
  * Function extracts new segment items based on the difference in media sequence
@@ -97,7 +98,9 @@ export const ReplaceSegmentURLs = (segments: ISegments): ISegments => {
     for (let i = 0; i < segListSize; i++) {
       const segmentUri: string = segments["video"][bw].segList[i].uri;
       if (segmentUri) {
-        const replacementUrl = `channel_${bw}_${segments["video"][bw].segList[i].index}.ts`; // assuming input is MPEG TS-file.
+        const keys = new URL(segmentUri).pathname.split(".");
+        const sourceFileExtension = keys.length > 1 ? keys.pop() : "ts";
+        const replacementUrl = `channel_${bw}_${segments["video"][bw].segList[i].index}.${sourceFileExtension}`; // assuming input is MPEG TS-file.
         segments["video"][bw].segList[i].uri = replacementUrl;
       }
     }
@@ -112,7 +115,9 @@ export const ReplaceSegmentURLs = (segments: ISegments): ISegments => {
         for (let i = 0; i < segListSize; i++) {
           const segmentUri = segments["audio"][group][lang].segList[i].uri;
           if (segmentUri) {
-            const replacementUrl = `channel_a-${group}-${lang}_${segments["audio"][group][lang].segList[i].index}.ts`; // assuming input is MPEG TS-file.
+            const keys = new URL(segmentUri).pathname.split(".");
+            const sourceFileExtension = keys.length > 1 ? keys.pop() : "aac";
+            const replacementUrl = `channel_${extraTracksMapper[getMapperKey("audio", group, lang)]}_${segments["audio"][group][lang].segList[i].index}.${sourceFileExtension}`; // assuming input is AAC.
             segments["audio"][group][lang].segList[i].uri = replacementUrl;
           }
         }
@@ -129,7 +134,9 @@ export const ReplaceSegmentURLs = (segments: ISegments): ISegments => {
         for (let i = 0; i < segListSize; i++) {
           const segmentUri = segments["subtitle"][group][lang].segList[i].uri;
           if (segmentUri) {
-            const replacementUrl = `channel_s-${group}-${lang}_${segments["subtitle"][group][lang].segList[i].index}.ts`; // assuming input is MPEG TS-file.
+            const keys = new URL(segmentUri).pathname.split(".");
+            const sourceFileExtension = keys.length > 1 ? keys.pop() : "vtt";
+            const replacementUrl = `channel_${extraTracksMapper[getMapperKey("subtitle", group, lang)]}_${segments["subtitle"][group][lang].segList[i].index}.${sourceFileExtension}`; // assuming input is WEBVTT.
             segments["subtitle"][group][lang].segList[i].uri = replacementUrl;
           }
         }
