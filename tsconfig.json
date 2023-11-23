@@ -3,6 +3,7 @@
     "module": "commonjs",
     "esModuleInterop": true,
     "target": "es6",
+    "lib": ["es2021", "dom"],
     "moduleResolution": "node",
     "sourceMap": true,
     "resolveJsonModule": true,

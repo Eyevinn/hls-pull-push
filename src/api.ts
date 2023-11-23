@@ -1,6 +1,7 @@
 import { Schemas } from "../util/schemas";
 import { IOutputPlugin, IOutputPluginDest } from "../types/output_plugin";
 import { FastifyInstance, FastifyRequest } from "fastify";
+import { URL } from 'url';
 import { HLSPullPush } from "./index";
 
 export default function (fastify: FastifyInstance, opts, done) {
