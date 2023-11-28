@@ -74,7 +74,22 @@ Example S3:
 }
 ```
 
-> Note: To use the S3 plugin you need to set your [AWS environment variables](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-envvars.html) including `AWS_REGION`
+Example AWS MediaStore:
+
+```
+{
+  "name": "test",
+  "url": "https://demo.vc.eyevinn.technology/channels/eyevinn/master.m3u8",
+  "output": "mediastore",
+  "payload: {
+    "container": "test",
+    "folder": "demo",
+    "endpoint": "https://******.data.mediastore.******.amazonaws.com"
+  }
+}
+```
+
+> Note: To use the S3 and MediaStore plugin you need to set your [AWS environment variables](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-envvars.html) including `AWS_REGION`
 
 ## Environment Variables
 
