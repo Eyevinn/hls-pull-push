@@ -26,6 +26,7 @@
   },
   "dependencies": {
     "@aws-sdk/client-mediapackage": "^3.41.0",
+    "@aws-sdk/client-mediastore-data": "^3.460.0",
     "@eyevinn/hls-recorder": "^0.5.4",
     "@eyevinn/iaf-plugin-aws-s3": "^1.0.0",
     "abort-controller": "^3.0.0",

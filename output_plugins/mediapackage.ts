@@ -21,7 +21,7 @@ export interface IMediaPackageOutputOptions {
   timeoutMs?: number;
 }
 
-export class MediaPackageOutput implements IOutputPlugin {
+export class MediaPackageOutput implements IOutputPlugin<IMediaPackageOutputOptions> {
   createOutputDestination(opts: IMediaPackageOutputOptions, logger: ILogger): IOutputPluginDest {
     // verify opts
     if (!opts.ingestUrls) {

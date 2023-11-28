@@ -1,3 +1,4 @@
+import { IOutputPluginType } from "../src";
 import { IOutputPlugin } from "../types/output_plugin";
 
 const BadRequestSchema = (exampleMsg) => ({
@@ -25,7 +26,7 @@ const AckRequestSchema = (exampleMsg) => ({
   },
 });
 
-export const Schemas = (name: string, plugins: IOutputPlugin[]) => {
+export const Schemas = (name: string, plugins: IOutputPluginType[]) => {
   let schemaList = [];
   plugins.map(plugin => {
     schemaList.push(plugin.getPayloadSchema());

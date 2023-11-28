@@ -1,7 +1,7 @@
 import { ILogger } from "./index";
 
-export interface IOutputPlugin {
-  createOutputDestination(opts: any, logger: ILogger);
+export interface IOutputPlugin<TOutputPluginOpts> {
+  createOutputDestination(opts: TOutputPluginOpts, logger: ILogger);
   getPayloadSchema();
 }
 
