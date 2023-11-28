@@ -1,20 +1,32 @@
-import uuid from "uuid/v4";
-import clone from "clone";
-import { HLSRecorder, ISegments, PlaylistType, Segment } from "@eyevinn/hls-recorder";
-import { promise as fastq } from "fastq";
-import type { queueAsPromised } from "fastq";
-import { GetOnlyNewestSegments, ReplaceSegmentURLs } from "../util/handleSegments";
+import uuid from 'uuid/v4';
+import clone from 'clone';
+import {
+  HLSRecorder,
+  ISegments,
+  PlaylistType,
+  Segment
+} from '@eyevinn/hls-recorder';
+import { promise as fastq } from 'fastq';
+import type { queueAsPromised } from 'fastq';
+import {
+  GetOnlyNewestSegments,
+  ReplaceSegmentURLs
+} from '../util/handleSegments';
 import {
   GenerateAudioM3U8,
   GenerateMediaM3U8,
-  GenerateSubtitleM3U8,
-} from "@eyevinn/hls-recorder/dist/util/manifest_generator.js";
-import { IOutputPluginDest } from "../types/output_plugin";
-const debug = require("debug")("hls-pull-push");
+  GenerateSubtitleM3U8
+} from '@eyevinn/hls-recorder/dist/util/manifest_generator.js';
+import { IOutputPluginDest } from '../types/output_plugin';
+import Debug from 'debug';
+const debug = Debug('hls-pull-push');
 
-const HLSRECORDER_RESTART_ON_ERROR = process.env.HLSRECORDER_RESTART_ON_ERROR === "true";
-const DEFAULT_LIVE_WINDOW_SIZE = parseInt(process.env.DEFAULT_LIVE_WINDOW_SIZE) || 2 * 60; // 120 seconds
-const REMOVED_SEGMENT_TTL = parseInt(process.env.REMOVED_SEGMENT_TTL) || 1 * 60 * 1000; // 60 seconds
+const HLSRECORDER_RESTART_ON_ERROR =
+  process.env.HLSRECORDER_RESTART_ON_ERROR === 'true';
+const DEFAULT_LIVE_WINDOW_SIZE =
+  parseInt(process.env.DEFAULT_LIVE_WINDOW_SIZE) || 2 * 60; // 120 seconds
+const REMOVED_SEGMENT_TTL =
+  parseInt(process.env.REMOVED_SEGMENT_TTL) || 1 * 60 * 1000; // 60 seconds
 
 type ManifestTask = {
   fileName: string;
@@ -41,7 +53,7 @@ interface IRemovedSegment {
 
 export let extraTracksMapper: TrackMapper = {};
 export function getMapperKey(type: string, g: string, l: string): string {
-  return `${type === "audio" ? "a:::" : "s:::"}${g}:::${l}`;
+  return `${type === 'audio' ? 'a:::' : 's:::'}${g}:::${l}`;
 }
 
 export class Session {
@@ -92,12 +104,13 @@ export class Session {
     this.hlsrecorder = new HLSRecorder(this.sourceURL, {
       recordDuration: -1,
       windowSize: this.targetWindowSize || -1,
-      vod: true,
+      vod: true
     });
     if (params.concurrency) {
       this.concurrentWorkers = params.concurrency;
     } else {
-      this.concurrentWorkers = parseInt(process.env.DEFAULT_UPLOAD_CONCURRENCY) || 16;
+      this.concurrentWorkers =
+        parseInt(process.env.DEFAULT_UPLOAD_CONCURRENCY) || 16;
     }
     this.outputDestination = params.plugin;
     this.active = true;
@@ -105,12 +118,12 @@ export class Session {
     this.collectedSegments = {
       video: {},
       audio: {},
-      subtitle: {},
+      subtitle: {}
     };
     this.m3uPlaylistData = {
       mseq: 0,
       dseq: 0,
-      targetDur: 0,
+      targetDur: 0
     };
     this.segmentGraveyard = [];
     this.eventQueue = [];
@@ -133,7 +146,7 @@ export class Session {
     // .-------------------------------------------.
     // |   Processing new recorder segment items   |
     // '-------------------------------------------'
-    this.hlsrecorder.on("mseq-increment", async (data) => {
+    this.hlsrecorder.on('mseq-increment', async (data) => {
       // When stopped, either by 'StopHLSRecorder' or by Event content,
       // the Session will be set to inactive
       if (this.isActive()) {
@@ -143,11 +156,13 @@ export class Session {
           await this._RunEventQueue();
         }
       } else {
-        debug(`[${this.sessionId}]: Event ignored due to Session being inactive`);
+        debug(
+          `[${this.sessionId}]: Event ignored due to Session being inactive`
+        );
       }
     });
 
-    this.hlsrecorder.on("error", async (err) => {
+    this.hlsrecorder.on('error', async (err) => {
       debug(`[${this.sessionId}]: Error from HLS Recorder! ${err}`);
       if (HLSRECORDER_RESTART_ON_ERROR) {
         this.StopHLSRecorder();
@@ -191,7 +206,7 @@ export class Session {
       dest: this.destination,
       concurrency: this.concurrentWorkers,
       windowSize: this.targetWindowSize,
-      sourcePlaylistType: this._getSourcePlaylistType(),
+      sourcePlaylistType: this._getSourcePlaylistType()
     };
   }
 
@@ -209,15 +224,21 @@ export class Session {
   private async _ProcessEventData(data: any) {
     if (data.type === PlaylistType.EVENT && !this.sourceIsEvent) {
       this.sourceIsEvent = true;
-    } else if (data.type === PlaylistType.LIVE && this.targetWindowSize === -1) {
+    } else if (
+      data.type === PlaylistType.LIVE &&
+      this.targetWindowSize === -1
+    ) {
       this.targetWindowSize = DEFAULT_LIVE_WINDOW_SIZE; // Default to 2 minutes if source HLS steam is type LIVE.
     }
     if (data.cookieJar) {
       this.cookieJar = data.cookieJar;
     }
-    const segsVideo = data.allPlaylistSegments["video"];
+    const segsVideo = data.allPlaylistSegments['video'];
     debug(
-      `[${this.sessionId}]: HLSRecorder event triggered. Recieved new segments. Totals amount per variant=${segsVideo[Object.keys(segsVideo)[0]].segList.length
+      `[${
+        this.sessionId
+      }]: HLSRecorder event triggered. Recieved new segments. Totals amount per variant=${
+        segsVideo[Object.keys(segsVideo)[0]].segList.length
       }`
     );
 
@@ -226,43 +247,59 @@ export class Session {
     if (!this.masterM3U8) {
       try {
         debug(`[${this.sessionId}]: Trying to upload multivariant manifest...`);
-        this.masterM3U8 = this._rewriteAllExtraMediaTracks(this.hlsrecorder.masterManifest, extraTracksMapper)
-          .replace(/master/g, "channel_");
-        if (this.masterM3U8 !== "") {
-          let result = await this.outputDestination.uploadMediaPlaylist({
-            fileName: "channel.m3u8",
-            fileData: this.masterM3U8,
+        this.masterM3U8 = this._rewriteAllExtraMediaTracks(
+          this.hlsrecorder.masterManifest,
+          extraTracksMapper
+        ).replace(/master/g, 'channel_');
+        if (this.masterM3U8 !== '') {
+          const result = await this.outputDestination.uploadMediaPlaylist({
+            fileName: 'channel.m3u8',
+            fileData: this.masterM3U8
           });
           if (result) {
-            debug(`[${this.sessionId}]: MultiVariant Manifest sent to Output`, this.masterM3U8);
+            debug(
+              `[${this.sessionId}]: MultiVariant Manifest sent to Output`,
+              this.masterM3U8
+            );
           } else {
-            debug(`[${this.sessionId}]: (!) Sending MultiVariant Manifest to Output Failed`);
+            debug(
+              `[${this.sessionId}]: (!) Sending MultiVariant Manifest to Output Failed`
+            );
             this.masterM3U8 = null;
           }
         } else {
-          debug(`[${this.sessionId}]: No multivariant manifest to be uploaded...`);
+          debug(
+            `[${this.sessionId}]: No multivariant manifest to be uploaded...`
+          );
         }
       } catch (error) {
-        console.error("Issue with Plugin Uploader", error);
+        console.error('Issue with Plugin Uploader', error);
       }
     }
 
     // Stop recorder if source became a VOD
     if (data.type === PlaylistType.VOD) {
-      debug(`[${this.sessionId}]: Stopping HLSRecorder due to recording becoming a VOD`);
+      debug(
+        `[${this.sessionId}]: Stopping HLSRecorder due to recording becoming a VOD`
+      );
       await this.StopHLSRecorder();
     }
     // Get only the newest segment items
     let BottomSegs: ISegments = {
       video: {},
       audio: {},
-      subtitle: {},
+      subtitle: {}
     };
     if (this.atFirstIncrement && data.type === PlaylistType.VOD) {
       BottomSegs = Object.assign({}, data.allPlaylistSegments);
     } else {
-      let latestSegmentIndex = this._getLatestSegmentIndex(this.collectedSegments);
-      BottomSegs = GetOnlyNewestSegments(data.allPlaylistSegments, latestSegmentIndex);
+      const latestSegmentIndex = this._getLatestSegmentIndex(
+        this.collectedSegments
+      );
+      BottomSegs = GetOnlyNewestSegments(
+        data.allPlaylistSegments,
+        latestSegmentIndex
+      );
     }
 
     // [ Upload Segments ]: all newest segments to S3 Bucket
@@ -272,7 +309,7 @@ export class Session {
       tasksSegments = await this._UploadAllSegments(this.segQueue, BottomSegs);
       // Let the Workers Work!
       const resultsSegments = [];
-      for (let result of tasksSegments) {
+      for (const result of tasksSegments) {
         resultsSegments.push(await result);
       }
       const failedUploadsIndexes = [];
@@ -291,15 +328,18 @@ export class Session {
 
       // Window Size & playlistData update
       if (this.targetWindowSize !== -1) {
-        const segRemovalData = this._AdjustForWindowSize(this.collectedSegments);
+        const segRemovalData = this._AdjustForWindowSize(
+          this.collectedSegments
+        );
         debug(
           `[${this.sessionId}]: Current Window Size [ ${this.currentWindowSize} ]. Target Window Size [ ${this.targetWindowSize} ]`
         );
         this.m3uPlaylistData.mseq += segRemovalData.segmentsReleased;
         debug(
-          `[${this.sessionId}]: Sessions internal m3u8 media-sequence count ${segRemovalData.segmentsReleased === 0
-            ? "is unchanged"
-            : `now at: [ ${this.m3uPlaylistData.mseq} ]`
+          `[${this.sessionId}]: Sessions internal m3u8 media-sequence count ${
+            segRemovalData.segmentsReleased === 0
+              ? 'is unchanged'
+              : `now at: [ ${this.m3uPlaylistData.mseq} ]`
           }`
         );
         if (segRemovalData.discontinuityTagsReleased !== 0) {
@@ -309,29 +349,44 @@ export class Session {
           );
         }
         // Delete Removed Segments via Plugin Delete function if implemented
-        if (segRemovalData.removedSegmentsList.length > 0 && this.segRemovalQueue) {
-          this.segmentGraveyard = this.segmentGraveyard.concat(segRemovalData.removedSegmentsList);
+        if (
+          segRemovalData.removedSegmentsList.length > 0 &&
+          this.segRemovalQueue
+        ) {
+          this.segmentGraveyard = this.segmentGraveyard.concat(
+            segRemovalData.removedSegmentsList
+          );
           await this._DeleteOlderSegments();
-          debug(`[${this.sessionId}]: Finished deleting all segments at output destination!`);
+          debug(
+            `[${this.sessionId}]: Finished deleting all segments at output destination!`
+          );
         }
       }
-      this.m3uPlaylistData.targetDur = this._getTargetDuration(this.collectedSegments);
+      this.m3uPlaylistData.targetDur = this._getTargetDuration(
+        this.collectedSegments
+      );
 
-      debug(`[${this.sessionId}]: Trying to Push all new hlsrecorder segments to Output`);
+      debug(
+        `[${this.sessionId}]: Trying to Push all new hlsrecorder segments to Output`
+      );
 
-      if (this.atFirstIncrement || this.sourceIsEvent || data.type === PlaylistType.LIVE) {
+      if (
+        this.atFirstIncrement ||
+        this.sourceIsEvent ||
+        data.type === PlaylistType.LIVE
+      ) {
         // Make Segment Urls formatted and ready for Manifest Generation
         SegmentsWithNewURL = ReplaceSegmentURLs(this.collectedSegments);
         // Upload Recording Playlist Manifest to S3 Bucket
-        let tasksManifest = await this._UploadAllManifest(
+        const tasksManifest = await this._UploadAllManifest(
           this.m3u8Queue,
           SegmentsWithNewURL,
           this.m3uPlaylistData,
-          this.masterM3U8 !== ""
+          this.masterM3U8 !== ''
         );
         // Let the Workers Work!
         const resultsManifest = [];
-        for (let result of tasksManifest) {
+        for (const result of tasksManifest) {
           resultsManifest.push(await result);
         }
         debug(`[${this.sessionId}]: Finished uploading all m3u8 manifests!`);
@@ -345,33 +400,38 @@ export class Session {
 
   private _getSourcePlaylistType() {
     if (this.hlsrecorder) {
-      let typeEnum = this.hlsrecorder.sourcePlaylistType;
+      const typeEnum = this.hlsrecorder.sourcePlaylistType;
       switch (typeEnum) {
         case PlaylistType.LIVE:
-          return "LIVE";
+          return 'LIVE';
         case PlaylistType.EVENT:
-          return "EVENT";
+          return 'EVENT';
         case PlaylistType.VOD:
-          return "VOD";
+          return 'VOD';
         default:
-          return "NONE";
+          return 'NONE';
       }
     } else {
-      return "NONE";
+      return 'NONE';
     }
   }
 
   private async _DeleteOlderSegments(): Promise<void> {
     // Depending on TTL, get new list of segments to be deleted
     const segmentsToDelete: string[] = this.segmentGraveyard
-      .filter((segItem) => Date.now() >= segItem.timeOfRemoval + REMOVED_SEGMENT_TTL)
+      .filter(
+        (segItem) => Date.now() >= segItem.timeOfRemoval + REMOVED_SEGMENT_TTL
+      )
       .map((segItem) => segItem.segmentFileName);
 
     if (segmentsToDelete.length > 0) {
-      let tasksRemoval = await this._RemoveAllSegments(this.segRemovalQueue, segmentsToDelete);
+      const tasksRemoval = await this._RemoveAllSegments(
+        this.segRemovalQueue,
+        segmentsToDelete
+      );
 
       const resultsDelete = [];
-      for (let result of tasksRemoval) {
+      for (const result of tasksRemoval) {
         resultsDelete.push(await result);
       }
       const successfullyDeletedSegments: string[] = segmentsToDelete.filter(
@@ -379,47 +439,49 @@ export class Session {
       );
       // Permanently delete segments from graveyard
       this.segmentGraveyard = this.segmentGraveyard.filter(
-        (segItem) => !successfullyDeletedSegments.includes(segItem.segmentFileName)
+        (segItem) =>
+          !successfullyDeletedSegments.includes(segItem.segmentFileName)
       );
     }
   }
 
   private _RemoveUnreachableSegments = (failedIndexes, Segments) => {
     for (let i = 0; i < failedIndexes.length; i++) {
-      const bandwidths = Object.keys(Segments["video"]);
-      const audioGroups = Object.keys(Segments["audio"]);
-      const subtitleGroups = Object.keys(Segments["subtitle"]);
+      const bandwidths = Object.keys(Segments['video']);
+      const audioGroups = Object.keys(Segments['audio']);
+      const subtitleGroups = Object.keys(Segments['subtitle']);
 
       const failedIndex = failedIndexes[i];
       if (failedIndex > -1) {
         // Remove from Video List
         bandwidths.forEach((bw) => {
-          if (Segments["video"][bw].segList[failedIndex + 1]) {
-            // eslint-disable-next-line standard/computed-property-even-spacing
-            Segments["video"][bw].segList[failedIndex + 1].discontinuity = true;
+          if (Segments['video'][bw].segList[failedIndex + 1]) {
+            Segments['video'][bw].segList[failedIndex + 1].discontinuity = true;
           }
-          Segments["video"][bw].segList.splice(failedIndex, 1);
+          Segments['video'][bw].segList.splice(failedIndex, 1);
         });
         // Remove from Audio List
         audioGroups.forEach((group) => {
-          const langs = Object.keys(Segments["audio"][group]);
+          const langs = Object.keys(Segments['audio'][group]);
           langs.forEach((lang) => {
-            if (Segments["audio"][group][lang].segList[failedIndex + 1]) {
-              // eslint-disable-next-line standard/computed-property-even-spacing
-              Segments["audio"][group][lang].segList[failedIndex + 1].discontinuity = true;
+            if (Segments['audio'][group][lang].segList[failedIndex + 1]) {
+              Segments['audio'][group][lang].segList[
+                failedIndex + 1
+              ].discontinuity = true;
             }
-            Segments["audio"][group][lang].segList.splice(failedIndex, 1);
+            Segments['audio'][group][lang].segList.splice(failedIndex, 1);
           });
         });
         // Remove from Subtitle List
         subtitleGroups.forEach((group) => {
-          const langs = Object.keys(Segments["subtitle"][group]);
+          const langs = Object.keys(Segments['subtitle'][group]);
           langs.forEach((lang) => {
-            if (Segments["subtitle"][group][lang].segList[failedIndex + 1]) {
-              // eslint-disable-next-line standard/computed-property-even-spacing
-              Segments["subtitle"][group][lang].segList[failedIndex + 1].discontinuity = true;
+            if (Segments['subtitle'][group][lang].segList[failedIndex + 1]) {
+              Segments['subtitle'][group][lang].segList[
+                failedIndex + 1
+              ].discontinuity = true;
             }
-            Segments["subtitle"][group][lang].segList.splice(failedIndex, 1);
+            Segments['subtitle'][group][lang].segList.splice(failedIndex, 1);
           });
         });
       }
@@ -428,9 +490,9 @@ export class Session {
 
   private _getLatestSegmentIndex(segments: ISegments): number {
     let endIndex: number;
-    if (Object.keys(segments["video"]).length > 0) {
-      const bandwidths: string[] = Object.keys(segments["video"]);
-      const segList: Segment[] = segments["video"][bandwidths[0]].segList;
+    if (Object.keys(segments['video']).length > 0) {
+      const bandwidths: string[] = Object.keys(segments['video']);
+      const segList: Segment[] = segments['video'][bandwidths[0]].segList;
       if (segList.length > 0) {
         endIndex = segList[segList.length - 1].index;
       }
@@ -444,22 +506,22 @@ export class Session {
     segments: ISegments
   ): Promise<any[]> {
     const tasks = [];
-    const bandwidths = Object.keys(segments["video"]);
-    const groupsAudio = Object.keys(segments["audio"]);
-    const groupsSubs = Object.keys(segments["subtitle"]);
+    const bandwidths = Object.keys(segments['video']);
+    const groupsAudio = Object.keys(segments['audio']);
+    const groupsSubs = Object.keys(segments['subtitle']);
     // Start pushing segments for all variants before moving on the next
-    let segListSize = segments["video"][bandwidths[0]].segList.length;
+    const segListSize = segments['video'][bandwidths[0]].segList.length;
     for (let i = 0; i < segListSize; i++) {
       bandwidths.forEach((bw) => {
-        const segmentUri = segments["video"][bw].segList[i].uri;
+        const segmentUri = segments['video'][bw].segList[i].uri;
         if (segmentUri) {
           // Design of the File Name here:
-          const keys = new URL(segmentUri).pathname.split(".");
-          const sourceFileExtension = keys.length > 1 ? keys.pop() : "ts";
-          const segmentFileName = `channel_${bw}_${segments["video"][bw].segList[i].index}.${sourceFileExtension}`;
-          let item = {
+          const keys = new URL(segmentUri).pathname.split('.');
+          const sourceFileExtension = keys.length > 1 ? keys.pop() : 'ts';
+          const segmentFileName = `channel_${bw}_${segments['video'][bw].segList[i].index}.${sourceFileExtension}`;
+          const item = {
             uri: segmentUri,
-            fileName: segmentFileName,
+            fileName: segmentFileName
           };
           tasks.push(taskQueue.push(item));
         }
@@ -468,22 +530,27 @@ export class Session {
     // For Demux Audio
     if (groupsAudio.length > 0) {
       // Start pushing segments for all variants before moving on the next
-      let _lang = Object.keys(segments["audio"][groupsAudio[0]])[0];
-      let segListSize = segments["audio"][groupsAudio[0]][_lang].segList.length;
+      const _lang = Object.keys(segments['audio'][groupsAudio[0]])[0];
+      const segListSize =
+        segments['audio'][groupsAudio[0]][_lang].segList.length;
       for (let i = 0; i < segListSize; i++) {
         groupsAudio.forEach((group) => {
-          const languages = Object.keys(segments["audio"][group]);
+          const languages = Object.keys(segments['audio'][group]);
           for (let k = 0; k < languages.length; k++) {
             const lang = languages[k];
-            const segmentUri = segments["audio"][group][lang].segList[i].uri;
+            const segmentUri = segments['audio'][group][lang].segList[i].uri;
             if (segmentUri) {
               // Design of the File Name here:
-              const keys = new URL(segmentUri).pathname.split(".");
-              const sourceFileExtension = keys.length > 1 ? keys.pop() : "aac";
-              const segmentFileName = `channel_${extraTracksMapper[getMapperKey("audio", group, lang)]}_${segments["audio"][group][lang].segList[i].index}.${sourceFileExtension}`;
-              let item = {
+              const keys = new URL(segmentUri).pathname.split('.');
+              const sourceFileExtension = keys.length > 1 ? keys.pop() : 'aac';
+              const segmentFileName = `channel_${
+                extraTracksMapper[getMapperKey('audio', group, lang)]
+              }_${
+                segments['audio'][group][lang].segList[i].index
+              }.${sourceFileExtension}`;
+              const item = {
                 uri: segmentUri,
-                fileName: segmentFileName,
+                fileName: segmentFileName
               };
               tasks.push(taskQueue.push(item));
             }
@@ -494,22 +561,27 @@ export class Session {
     // For Subtitles
     if (groupsSubs.length > 0) {
       // Start pushing segments for all variants before moving on the next
-      let _lang = Object.keys(segments["subtitle"][groupsSubs[0]])[0];
-      let segListSize = segments["subtitle"][groupsSubs[0]][_lang].segList.length;
+      const _lang = Object.keys(segments['subtitle'][groupsSubs[0]])[0];
+      const segListSize =
+        segments['subtitle'][groupsSubs[0]][_lang].segList.length;
       for (let i = 0; i < segListSize; i++) {
         groupsSubs.forEach((group) => {
-          const languages = Object.keys(segments["subtitle"][group]);
+          const languages = Object.keys(segments['subtitle'][group]);
           for (let k = 0; k < languages.length; k++) {
             const lang = languages[k];
-            const segmentUri = segments["subtitle"][group][lang].segList[i].uri;
+            const segmentUri = segments['subtitle'][group][lang].segList[i].uri;
             if (segmentUri) {
               // Design of the File Name here:
-              const keys = new URL(segmentUri).pathname.split(".");
-              const sourceFileExtension = keys.length > 1 ? keys.pop() : "vtt";
-              const segmentFileName = `channel_${extraTracksMapper[getMapperKey("subtitle", group, lang)]}_${segments["subtitle"][group][lang].segList[i].index}.${sourceFileExtension}`;
-              let item = {
+              const keys = new URL(segmentUri).pathname.split('.');
+              const sourceFileExtension = keys.length > 1 ? keys.pop() : 'vtt';
+              const segmentFileName = `channel_${
+                extraTracksMapper[getMapperKey('subtitle', group, lang)]
+              }_${
+                segments['subtitle'][group][lang].segList[i].index
+              }.${sourceFileExtension}`;
+              const item = {
                 uri: segmentUri,
-                fileName: segmentFileName,
+                fileName: segmentFileName
               };
               tasks.push(taskQueue.push(item));
             }
@@ -521,11 +593,14 @@ export class Session {
     return tasks;
   }
 
-  private async _RemoveAllSegments(taskQueue: queueAsPromised<SegmentRemovalTask>, fileNameList: string[]) {
+  private async _RemoveAllSegments(
+    taskQueue: queueAsPromised<SegmentRemovalTask>,
+    fileNameList: string[]
+  ) {
     const tasks = [];
     fileNameList.forEach((name) => {
-      let item: SegmentRemovalTask = {
-        fileName: name,
+      const item: SegmentRemovalTask = {
+        fileName: name
       };
       tasks.push(taskQueue.push(item));
     });
@@ -540,137 +615,163 @@ export class Session {
     multiVariantExists: boolean
   ): Promise<any[]> {
     const tasks = [];
-    const bandwidths = Object.keys(segments["video"]);
-    const groupsAudio = Object.keys(segments["audio"]);
-    const groupsSubs = Object.keys(segments["subtitle"]);
+    const bandwidths = Object.keys(segments['video']);
+    const groupsAudio = Object.keys(segments['audio']);
+    const groupsSubs = Object.keys(segments['subtitle']);
     // Upload all Playlist Manifest, Start with Video, then do Audio if exists
     bandwidths.forEach(async (bw) => {
-      let generatorOptions = {
+      const generatorOptions = {
         mseq: m3uPlaylistData.mseq,
         dseq: m3uPlaylistData.dseq,
         targetDuration: m3uPlaylistData.targetDur,
-        allSegments: segments,
+        allSegments: segments
       };
-      GenerateMediaM3U8(parseInt(bw), generatorOptions).then((playlistM3u8: string) => {
-        const playlistToBeUploaded: string = playlistM3u8.replace(/master/g, "channel");
-        let name;
-        if (multiVariantExists) {
-          name = `channel_${bw}.m3u8`;
-        } else {
-          name = "channel.m3u8";
-        }
-        let item = {
-          fileName: name,
-          fileData: playlistToBeUploaded,
-        };
+      GenerateMediaM3U8(parseInt(bw), generatorOptions).then(
+        (playlistM3u8: string) => {
+          const playlistToBeUploaded: string = playlistM3u8.replace(
+            /master/g,
+            'channel'
+          );
+          let name;
+          if (multiVariantExists) {
+            name = `channel_${bw}.m3u8`;
+          } else {
+            name = 'channel.m3u8';
+          }
+          const item = {
+            fileName: name,
+            fileData: playlistToBeUploaded
+          };
 
-        // For Debugging
-        if (bw === bandwidths[0]) {
-          debug(playlistToBeUploaded);
-        }
+          // For Debugging
+          if (bw === bandwidths[0]) {
+            debug(playlistToBeUploaded);
+          }
 
-        tasks.push(taskQueue.push(item));
-      });
+          tasks.push(taskQueue.push(item));
+        }
+      );
     });
     // For Demux Audio
     if (groupsAudio.length > 0) {
       groupsAudio.forEach(async (group, gi) => {
-        const languages = Object.keys(segments["audio"][group]);
+        const languages = Object.keys(segments['audio'][group]);
         for (let k = 0; k < languages.length; k++) {
           const lang = languages[k];
-          let generatorOptions = {
+          const generatorOptions = {
             mseq: m3uPlaylistData.mseq,
             dseq: m3uPlaylistData.dseq,
             targetDuration: m3uPlaylistData.targetDur,
-            allSegments: segments,
+            allSegments: segments
           };
-          GenerateAudioM3U8(group, lang, generatorOptions).then((playlistM3u8: string) => {
-            const playlistToBeUploaded: string = playlistM3u8.replace(/master/g, "channel");
-            let name;
-            if (multiVariantExists) {
-              name = `channel_${extraTracksMapper[getMapperKey("audio", group, lang)]}.m3u8`;
-            } else {
-              name = "channel.m3u8";
-            }
-            let item = {
-              fileName: name,
-              fileData: playlistToBeUploaded,
-            };
+          GenerateAudioM3U8(group, lang, generatorOptions).then(
+            (playlistM3u8: string) => {
+              const playlistToBeUploaded: string = playlistM3u8.replace(
+                /master/g,
+                'channel'
+              );
+              let name;
+              if (multiVariantExists) {
+                name = `channel_${
+                  extraTracksMapper[getMapperKey('audio', group, lang)]
+                }.m3u8`;
+              } else {
+                name = 'channel.m3u8';
+              }
+              const item = {
+                fileName: name,
+                fileData: playlistToBeUploaded
+              };
 
-            // For Debugging
-            if (gi === 0 && k === 0) {
-              debug(playlistToBeUploaded);
-            }
+              // For Debugging
+              if (gi === 0 && k === 0) {
+                debug(playlistToBeUploaded);
+              }
 
-            tasks.push(taskQueue.push(item));
-          });
+              tasks.push(taskQueue.push(item));
+            }
+          );
         }
       });
     }
     // For Subtitles
     if (groupsSubs.length > 0) {
       groupsSubs.forEach(async (group, gi) => {
-        const languages = Object.keys(segments["subtitle"][group]);
+        const languages = Object.keys(segments['subtitle'][group]);
         for (let k = 0; k < languages.length; k++) {
           const lang = languages[k];
-          let generatorOptions = {
+          const generatorOptions = {
             mseq: m3uPlaylistData.mseq,
             dseq: m3uPlaylistData.dseq,
             targetDuration: m3uPlaylistData.targetDur,
-            allSegments: segments,
+            allSegments: segments
           };
-          GenerateSubtitleM3U8(group, lang, generatorOptions).then((playlistM3u8) => {
-            const playlistToBeUploaded: string = playlistM3u8.replace(/master/g, "channel");
-            let name;
-            if (multiVariantExists) {
-              name = `channel_${extraTracksMapper[getMapperKey("subtitle", group, lang)]}.m3u8`;
-            } else {
-              name = "channel.m3u8";
-            }
-            let item = {
-              fileName: name,
-              fileData: playlistToBeUploaded,
-            };
+          GenerateSubtitleM3U8(group, lang, generatorOptions).then(
+            (playlistM3u8) => {
+              const playlistToBeUploaded: string = playlistM3u8.replace(
+                /master/g,
+                'channel'
+              );
+              let name;
+              if (multiVariantExists) {
+                name = `channel_${
+                  extraTracksMapper[getMapperKey('subtitle', group, lang)]
+                }.m3u8`;
+              } else {
+                name = 'channel.m3u8';
+              }
+              const item = {
+                fileName: name,
+                fileData: playlistToBeUploaded
+              };
 
-            // For Debugging
-            if (gi === 0 && k === 0) {
-              debug(playlistToBeUploaded);
-            }
+              // For Debugging
+              if (gi === 0 && k === 0) {
+                debug(playlistToBeUploaded);
+              }
 
-            tasks.push(taskQueue.push(item));
-          });
+              tasks.push(taskQueue.push(item));
+            }
+          );
         }
       });
     }
     return tasks;
   }
 
-  private _PushSegments = (Segments: ISegments, newSegments: ISegments): void => {
-    const bandwidths = Object.keys(newSegments["video"]);
-    const groupsAudio = Object.keys(newSegments["audio"]);
-    const groupsSubs = Object.keys(newSegments["subtitle"]);
+  private _PushSegments = (
+    Segments: ISegments,
+    newSegments: ISegments
+  ): void => {
+    const bandwidths = Object.keys(newSegments['video']);
+    const groupsAudio = Object.keys(newSegments['audio']);
+    const groupsSubs = Object.keys(newSegments['subtitle']);
 
     // Start with pushing video segments
     bandwidths.forEach((bw) => {
-      if (newSegments["video"][bw].segList.length > 0) {
-        if (!Segments["video"][bw]) {
-          Segments["video"][bw] = {
+      if (newSegments['video'][bw].segList.length > 0) {
+        if (!Segments['video'][bw]) {
+          Segments['video'][bw] = {
             mediaSeq: -1,
-            segList: [],
+            segList: []
           };
         }
         // update mseq
-        Segments["video"][bw].mediaSeq = newSegments["video"][bw].mediaSeq;
+        Segments['video'][bw].mediaSeq = newSegments['video'][bw].mediaSeq;
         // update seglist
-        for (let idx = 0; idx < newSegments["video"][bw].segList.length; idx++) {
-          let newVideoSegment = newSegments["video"][bw].segList[idx];
+        for (
+          let idx = 0;
+          idx < newSegments['video'][bw].segList.length;
+          idx++
+        ) {
+          const newVideoSegment = newSegments['video'][bw].segList[idx];
           // Do not add duplicate seg items. Discontinuity tags and others are allowed.
           if (
-            !Segments["video"][bw].segList.some(
+            !Segments['video'][bw].segList.some(
               (seg) => seg.index === newVideoSegment.index && seg.index !== null
             )
           ) {
-            Segments["video"][bw].segList.push(newVideoSegment);
+            Segments['video'][bw].segList.push(newVideoSegment);
 
             // Log what has been pushed - REMOVE LATER
             let segInfo: string;
@@ -686,9 +787,11 @@ export class Session {
             );
 
             // Update Session's current window size based on segment duration.
-            if (bw === Object.keys(Segments["video"])[0]) {
+            if (bw === Object.keys(Segments['video'])[0]) {
               if (this.targetWindowSize !== -1) {
-                this.currentWindowSize += newVideoSegment?.duration ? newVideoSegment.duration : 0;
+                this.currentWindowSize += newVideoSegment?.duration
+                  ? newVideoSegment.duration
+                  : 0;
               }
             }
           }
@@ -698,25 +801,35 @@ export class Session {
     // Same for Audio if exists any
     if (groupsAudio.length > 0) {
       for (let i = 0; i < groupsAudio.length; i++) {
-        let group = groupsAudio[i];
-        if (!Segments["audio"][group]) {
-          Segments["audio"][group] = {};
+        const group = groupsAudio[i];
+        if (!Segments['audio'][group]) {
+          Segments['audio'][group] = {};
         }
-        Object.keys(newSegments["audio"][group]).forEach((lang) => {
+        Object.keys(newSegments['audio'][group]).forEach((lang) => {
           // update mseq
-          if (!Segments["audio"][group][lang]) {
-            Segments["audio"][group][lang] = {
+          if (!Segments['audio'][group][lang]) {
+            Segments['audio'][group][lang] = {
               mediaSeq: -1,
-              segList: [],
+              segList: []
             };
           }
-          Segments["audio"][group][lang].mediaSeq = newSegments["audio"][group][lang].mediaSeq;
+          Segments['audio'][group][lang].mediaSeq =
+            newSegments['audio'][group][lang].mediaSeq;
 
-          for (let idx = 0; idx < newSegments["audio"][group][lang].segList.length; idx++) {
+          for (
+            let idx = 0;
+            idx < newSegments['audio'][group][lang].segList.length;
+            idx++
+          ) {
             // update seglist
-            let newAudioSegment = newSegments["audio"][group][lang].segList[idx];
-            if (!Segments["audio"][group][lang].segList.some((seg) => seg.index === newAudioSegment.index)) {
-              Segments["audio"][group][lang].segList.push(newAudioSegment);
+            const newAudioSegment =
+              newSegments['audio'][group][lang].segList[idx];
+            if (
+              !Segments['audio'][group][lang].segList.some(
+                (seg) => seg.index === newAudioSegment.index
+              )
+            ) {
+              Segments['audio'][group][lang].segList.push(newAudioSegment);
 
               // Log what has been pushed - REMOVE LATER
               let segInfo: string;
@@ -738,27 +851,37 @@ export class Session {
     // And same for Subtitles if any exists
     if (groupsSubs.length > 0) {
       for (let i = 0; i < groupsSubs.length; i++) {
-        let group = groupsSubs[i];
-        if (!Segments["subtitle"][group]) {
-          Segments["subtitle"][group] = {};
+        const group = groupsSubs[i];
+        if (!Segments['subtitle'][group]) {
+          Segments['subtitle'][group] = {};
         }
-        Object.keys(newSegments["subtitle"][group]).forEach((lang) => {
+        Object.keys(newSegments['subtitle'][group]).forEach((lang) => {
           // update mseq
-          if (!Segments["subtitle"][group][lang]) {
-            Segments["subtitle"][group][lang] = {
+          if (!Segments['subtitle'][group][lang]) {
+            Segments['subtitle'][group][lang] = {
               mediaSeq: -1,
-              segList: [],
+              segList: []
             };
           }
-          Segments["subtitle"][group][lang].mediaSeq = newSegments["subtitle"][group][lang].mediaSeq;
+          Segments['subtitle'][group][lang].mediaSeq =
+            newSegments['subtitle'][group][lang].mediaSeq;
 
-          for (let idx = 0; idx < newSegments["subtitle"][group][lang].segList.length; idx++) {
+          for (
+            let idx = 0;
+            idx < newSegments['subtitle'][group][lang].segList.length;
+            idx++
+          ) {
             // update seglist
-            let newsubtitleSegment = newSegments["subtitle"][group][lang].segList[idx];
+            const newsubtitleSegment =
+              newSegments['subtitle'][group][lang].segList[idx];
             if (
-              !Segments["subtitle"][group][lang].segList.some((seg) => seg.index === newsubtitleSegment.index)
+              !Segments['subtitle'][group][lang].segList.some(
+                (seg) => seg.index === newsubtitleSegment.index
+              )
             ) {
-              Segments["subtitle"][group][lang].segList.push(newsubtitleSegment);
+              Segments['subtitle'][group][lang].segList.push(
+                newsubtitleSegment
+              );
 
               // Log what has been pushed - REMOVE LATER
               let segInfo: string;
@@ -784,37 +907,42 @@ export class Session {
     discontinuityTagsReleased: number;
     removedSegmentsList: IRemovedSegment[];
   } {
-    let output = {
+    const output = {
       segmentsReleased: 0,
       discontinuityTagsReleased: 0,
-      removedSegmentsList: [],
+      removedSegmentsList: []
     };
     while (this.currentWindowSize > this.targetWindowSize) {
       // Add tag to for all media
-      const bandwidths = Object.keys(Segments["video"]);
-      const groups = Object.keys(Segments["audio"]);
-      const groupsSubs = Object.keys(Segments["subtitle"]);
+      const bandwidths = Object.keys(Segments['video']);
+      const groups = Object.keys(Segments['audio']);
+      const groupsSubs = Object.keys(Segments['subtitle']);
       // Abort if there is nothing to shift!
-      if (bandwidths.length === 0 || Segments["video"][bandwidths[0]].segList.length === 0) {
+      if (
+        bandwidths.length === 0 ||
+        Segments['video'][bandwidths[0]].segList.length === 0
+      ) {
         break;
       }
       // Start Shifting on all video lists
       bandwidths.forEach((bw, index) => {
-        const releasedSegmentItem = Segments["video"][bw].segList.shift();
+        const releasedSegmentItem = Segments['video'][bw].segList.shift();
         if (releasedSegmentItem?.uri) {
-          const keys = new URL(releasedSegmentItem?.uri).pathname.split(".");
-          const sourceFileExtension = keys.length > 1 ? keys.pop() : "ts";
+          const keys = new URL(releasedSegmentItem?.uri).pathname.split('.');
+          const sourceFileExtension = keys.length > 1 ? keys.pop() : 'ts';
           const segmentFileName = `channel_${bw}_${releasedSegmentItem.index}.${sourceFileExtension}`;
           const removedItem: IRemovedSegment = {
             segmentFileName: segmentFileName,
-            timeOfRemoval: Date.now(),
+            timeOfRemoval: Date.now()
           };
           output.removedSegmentsList.push(removedItem);
         }
         if (index === 0) {
           if (releasedSegmentItem?.duration) {
             // Reduce current window size... and assume that audio and sub tracks are aligned.
-            this.currentWindowSize -= releasedSegmentItem?.duration ? releasedSegmentItem.duration : 0;
+            this.currentWindowSize -= releasedSegmentItem?.duration
+              ? releasedSegmentItem.duration
+              : 0;
             output.segmentsReleased++;
           }
           if (releasedSegmentItem?.discontinuity) {
@@ -824,17 +952,20 @@ export class Session {
       });
       // Shifting on all audio lists
       groups.forEach((group) => {
-        const langs = Object.keys(Segments["audio"][group]);
+        const langs = Object.keys(Segments['audio'][group]);
         for (let i = 0; i < langs.length; i++) {
-          let lang = langs[i];
-          const releasedSegmentItem = Segments["audio"][group][lang].segList.shift();
+          const lang = langs[i];
+          const releasedSegmentItem =
+            Segments['audio'][group][lang].segList.shift();
           if (releasedSegmentItem?.uri) {
-            const keys = new URL(releasedSegmentItem?.uri).pathname.split(".");
-            const sourceFileExtension = keys.length > 1 ? keys.pop() : "aac";
-            const segmentFileName = `channel_${extraTracksMapper[getMapperKey("audio", group, lang)]}_${releasedSegmentItem.index}.${sourceFileExtension}`;
+            const keys = new URL(releasedSegmentItem?.uri).pathname.split('.');
+            const sourceFileExtension = keys.length > 1 ? keys.pop() : 'aac';
+            const segmentFileName = `channel_${
+              extraTracksMapper[getMapperKey('audio', group, lang)]
+            }_${releasedSegmentItem.index}.${sourceFileExtension}`;
             const removedItem: IRemovedSegment = {
               segmentFileName: segmentFileName,
-              timeOfRemoval: Date.now(),
+              timeOfRemoval: Date.now()
             };
             output.removedSegmentsList.push(removedItem);
           }
@@ -842,17 +973,20 @@ export class Session {
       });
       // Shifting on all subtitle lists
       groupsSubs.forEach((group) => {
-        const langs = Object.keys(Segments["subtitle"][group]);
+        const langs = Object.keys(Segments['subtitle'][group]);
         for (let i = 0; i < langs.length; i++) {
-          let lang = langs[i];
-          const releasedSegmentItem = Segments["subtitle"][group][lang].segList.shift();
+          const lang = langs[i];
+          const releasedSegmentItem =
+            Segments['subtitle'][group][lang].segList.shift();
           if (releasedSegmentItem?.uri) {
-            const keys = new URL(releasedSegmentItem?.uri).pathname.split(".");
-            const sourceFileExtension = keys.length > 1 ? keys.pop() : "vtt";
-            const segmentFileName = `channel_${extraTracksMapper[getMapperKey("subtitle", group, lang)]}_${releasedSegmentItem.index}.${sourceFileExtension}`;
+            const keys = new URL(releasedSegmentItem?.uri).pathname.split('.');
+            const sourceFileExtension = keys.length > 1 ? keys.pop() : 'vtt';
+            const segmentFileName = `channel_${
+              extraTracksMapper[getMapperKey('subtitle', group, lang)]
+            }_${releasedSegmentItem.index}.${sourceFileExtension}`;
             const removedItem: IRemovedSegment = {
               segmentFileName: segmentFileName,
-              timeOfRemoval: Date.now(),
+              timeOfRemoval: Date.now()
             };
             output.removedSegmentsList.push(removedItem);
           }
@@ -865,9 +999,9 @@ export class Session {
 
   private _getTargetDuration(Segments: ISegments): number {
     let maxDuration = 0;
-    const bandwidths = Object.keys(Segments["video"]);
+    const bandwidths = Object.keys(Segments['video']);
     if (bandwidths.length > 0) {
-      let segList = Segments["video"][bandwidths[0]].segList;
+      const segList = Segments['video'][bandwidths[0]].segList;
       segList.forEach((seg) => {
         if (seg.duration !== null && seg.duration > maxDuration) {
           maxDuration = seg.duration;
@@ -878,30 +1012,35 @@ export class Session {
   }
 
   private _getExtraTracksMapper = (all_segments) => {
-    let tracks = {}
+    const tracks = {};
     let variant_count = 0;
     let audio_lang_count = 0;
     const audio_segments = all_segments.audio;
-    Object.keys(audio_segments).forEach(g => {
+    Object.keys(audio_segments).forEach((g) => {
       variant_count++;
-      Object.keys(audio_segments[g]).forEach(l => {
+      Object.keys(audio_segments[g]).forEach((l) => {
         tracks[`a:::${g}:::${l}`] = `audio${variant_count}_${audio_lang_count}`;
         audio_lang_count++;
       });
     });
     let subtitle_lang_count = 0;
     const subtitle_segments = all_segments.subtitle;
-    Object.keys(subtitle_segments).forEach(g => {
+    Object.keys(subtitle_segments).forEach((g) => {
       variant_count++;
-      Object.keys(subtitle_segments[g]).forEach(l => {
-        tracks[`s:::${g}:::${l}`] = `text${variant_count}_${subtitle_lang_count}`;
+      Object.keys(subtitle_segments[g]).forEach((l) => {
+        tracks[
+          `s:::${g}:::${l}`
+        ] = `text${variant_count}_${subtitle_lang_count}`;
         subtitle_lang_count++;
       });
     });
     return tracks;
-  }
+  };
 
-  private _rewriteAllExtraMediaTracks(masterManifest: string, mapper: TrackMapper): string {
+  private _rewriteAllExtraMediaTracks(
+    masterManifest: string,
+    mapper: TrackMapper
+  ): string {
     const mediaTrackRegex = /EXT-X-MEDIA:TYPE=(AUDIO|SUBTITLES).*URI="(.+?)"/g;
     let rewrittenManifest = masterManifest;
     let match;
@@ -909,7 +1048,7 @@ export class Session {
       const type = match[1];
       const uri = match[2];
       const [_, mediaTrack, languageCode] = uri.match(/_(\S+)_([a-z]+)\.m3u8$/);
-      const prefix = type === "AUDIO" ? "a:::" : "s:::";
+      const prefix = type === 'AUDIO' ? 'a:::' : 's:::';
       const key = `${prefix}${mediaTrack}:::${languageCode}`;
       const mappedValue = mapper[key];
       if (mappedValue) {
@@ -919,5 +1058,5 @@ export class Session {
       }
     }
     return rewrittenManifest;
-  };
+  }
 }

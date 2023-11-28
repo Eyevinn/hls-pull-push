@@ -1,18 +1,21 @@
-import fastify, { FastifyInstance } from "fastify";
-import { Session } from "../util/session";
-import { IOutputPlugin, IOutputPluginDest } from "../types/output_plugin";
-import { ILogger } from "../types/index";
-import { AbstractLogger } from "./logger";
-export { MediaPackageOutput } from "../output_plugins/mediapackage";
-export {  MediaStoreOutput } from "../output_plugins/mediastore";
-export { S3BucketOutput } from "../output_plugins/s3bucket";
-export { VoidOutput } from "../output_plugins/void";
+import fastify, { FastifyInstance } from 'fastify';
+import { Session } from '../util/session';
+import { IOutputPlugin, IOutputPluginDest } from '../types/output_plugin';
+import { ILogger } from '../types/index';
+import { AbstractLogger } from './logger';
+export { MediaPackageOutput } from '../output_plugins/mediapackage';
+export { MediaStoreOutput } from '../output_plugins/mediastore';
+export { S3BucketOutput } from '../output_plugins/s3bucket';
+export { VoidOutput } from '../output_plugins/void';
 
-import api from "./api";
-import { IMediaStoreOutputOptions } from "../output_plugins/mediastore";
-import { IMediaPackageOutputOptions } from "../output_plugins/mediapackage";
-import { IS3BucketOutputOptions } from "../output_plugins/s3bucket";
-import { IVoidOutputOptions } from "../output_plugins/void";
+import api from './api';
+import { IMediaStoreOutputOptions } from '../output_plugins/mediastore';
+import { IMediaPackageOutputOptions } from '../output_plugins/mediapackage';
+import { IS3BucketOutputOptions } from '../output_plugins/s3bucket';
+import { IVoidOutputOptions } from '../output_plugins/void';
+
+import fastifySwagger from 'fastify-swagger';
+import fastifyCors from 'fastify-cors';
 
 export interface IDestPayload {
   destination: string;
@@ -20,7 +23,12 @@ export interface IDestPayload {
   password: string;
 }
 
-export type IOutputPluginType = IOutputPlugin<IMediaStoreOutputOptions | IMediaPackageOutputOptions | IS3BucketOutputOptions | IVoidOutputOptions>;
+export type IOutputPluginType = IOutputPlugin<
+  | IMediaStoreOutputOptions
+  | IMediaPackageOutputOptions
+  | IS3BucketOutputOptions
+  | IVoidOutputOptions
+>;
 
 export class HLSPullPush {
   private server: FastifyInstance;
@@ -34,21 +42,22 @@ export class HLSPullPush {
     this.logger = logger || new AbstractLogger();
 
     this.server = fastify({ ignoreTrailingSlash: true });
-    this.server.register(require("fastify-swagger"), {
-      routePrefix: "/api/docs",
+    this.server.register(fastifySwagger, {
+      routePrefix: '/api/docs',
       swagger: {
         info: {
-          title: "Pull Push Service API",
-          description: "Service that pulls from HLS live stream and pushes to Plugin Destination",
-          version: "0.1.0",
+          title: 'Pull Push Service API',
+          description:
+            'Service that pulls from HLS live stream and pushes to Plugin Destination',
+          version: '0.1.0'
         },
-        tags: [{ name: "fetcher", description: "Fetcher related end-points" }],
+        tags: [{ name: 'fetcher', description: 'Fetcher related end-points' }]
       },
-      exposeRoute: true,
+      exposeRoute: true
     });
-    this.server.register(require("fastify-cors"), {});
-    this.server.get("/", async () => {
-      return "OK\n";
+    this.server.register(fastifyCors, {});
+    this.server.get('/', async () => {
+      return 'OK\n';
     });
   }
 
@@ -58,7 +67,7 @@ export class HLSPullPush {
     destPlugin,
     destPluginName,
     concurrency,
-    windowSize,
+    windowSize
   }: {
     name: string;
     url: string;
@@ -74,7 +83,7 @@ export class HLSPullPush {
       plugin: destPlugin,
       dest: destPluginName,
       concurrency,
-      windowSize,
+      windowSize
     });
 
     // Store Hls recorder in dictionary in-memory
@@ -85,14 +94,16 @@ export class HLSPullPush {
   }
 
   async stopFetcher(fetcherId: string) {
-    let session = this.SESSIONS[fetcherId];
+    const session = this.SESSIONS[fetcherId];
 
     // Stop recording
     if (session.isActive()) {
       await session.StopHLSRecorder();
     }
     // Delete Session from store
-    this.logger.info(`Deleting Fetcher Session [ ${fetcherId} ] from Session Storage`);
+    this.logger.info(
+      `Deleting Fetcher Session [ ${fetcherId} ] from Session Storage`
+    );
     delete this.SESSIONS[fetcherId];
   }
 
@@ -107,7 +118,9 @@ export class HLSPullPush {
         delete this.SESSIONS[sessionId];
       }
     });
-    return Object.keys(this.SESSIONS).map((sessionId) => this.SESSIONS[sessionId].toJSON());
+    return Object.keys(this.SESSIONS).map((sessionId) =>
+      this.SESSIONS[sessionId].toJSON()
+    );
   }
 
   registerPlugin(name: string, plugin: IOutputPluginType): void {
@@ -122,7 +135,9 @@ export class HLSPullPush {
       const result = this.PLUGINS[name];
       if (!result) {
         this.logger.info(
-          `Requested Plugin:'${name}' Not Found Amongst Registered Plugins: [${Object.keys(this.PLUGINS)}]`
+          `Requested Plugin:'${name}' Not Found Amongst Registered Plugins: [${Object.keys(
+            this.PLUGINS
+          )}]`
         );
         return null;
       }
@@ -141,8 +156,8 @@ export class HLSPullPush {
   }
 
   listen(port) {
-    this.server.register(api, { instance: this, prefix: "/api/v1" });
-    this.server.listen(port, "0.0.0.0", (err, address) => {
+    this.server.register(api, { instance: this, prefix: '/api/v1' });
+    this.server.listen(port, '0.0.0.0', (err, address) => {
       if (err) {
         throw err;
       }

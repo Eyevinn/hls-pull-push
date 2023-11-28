@@ -1,4 +1,4 @@
-import { ILogger } from "../types/index";
+import { ILogger } from '../types/index';
 
 export class AbstractLogger implements ILogger {
   private doLog(level: string, message: string) {
@@ -6,15 +6,15 @@ export class AbstractLogger implements ILogger {
   }
 
   verbose(message: string) {
-    this.doLog("VERBOSE", message);
+    this.doLog('VERBOSE', message);
   }
 
   info(message: string) {
-    this.doLog("INFO", message);
+    this.doLog('INFO', message);
   }
 
   warn(message: string) {
-    this.doLog("WARN", message);
+    this.doLog('WARN', message);
   }
 
   error(message: string) {
