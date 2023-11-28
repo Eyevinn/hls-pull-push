@@ -3,18 +3,19 @@ import {
   IOutputPlugin,
   IOutputPluginDest,
   IRemoteFileDeletion,
-  IRemoteFileUpload,
-} from "../types/output_plugin";
-import { ILogger } from "../types/index";
-
-require("dotenv").config();
+  IRemoteFileUpload
+} from '../types/output_plugin';
+import { ILogger } from '../types/index';
 
 export interface IVoidOutputOptions {
-  void?: string; 
+  void?: string;
 }
 
 export class VoidOutput implements IOutputPlugin<IVoidOutputOptions> {
-  createOutputDestination(opts: IVoidOutputOptions, logger: ILogger): IOutputPluginDest {
+  createOutputDestination(
+    opts: IVoidOutputOptions,
+    logger: ILogger
+  ): IOutputPluginDest {
     return new VoidOutputDestination(opts, logger);
   }
 
@@ -36,17 +37,23 @@ export class VoidOutputDestination implements IOutputPluginDest {
   }
 
   uploadMediaPlaylist(opts: ILocalFileUpload): Promise<boolean> {
-    this.logger.info(`[${this.sessionId}] uploadMediaPlaylist ${JSON.stringify(opts)}`);
+    this.logger.info(
+      `[${this.sessionId}] uploadMediaPlaylist ${JSON.stringify(opts)}`
+    );
     return Promise.resolve(true);
   }
 
   uploadMediaSegment(opts: IRemoteFileUpload): Promise<boolean> {
-    this.logger.info(`${this.sessionId}] uploadMediaSegment ${JSON.stringify(opts)}`);
+    this.logger.info(
+      `${this.sessionId}] uploadMediaSegment ${JSON.stringify(opts)}`
+    );
     return Promise.resolve(true);
   }
 
   deleteMediaSegment(opts: IRemoteFileDeletion): Promise<boolean> {
-    this.logger.info(`${this.sessionId}] deleteMediaSegment ${JSON.stringify(opts)}`);
+    this.logger.info(
+      `${this.sessionId}] deleteMediaSegment ${JSON.stringify(opts)}`
+    );
     return Promise.resolve(true);
   }
 }

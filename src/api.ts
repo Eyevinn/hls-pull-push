@@ -1,15 +1,15 @@
-import { Schemas } from "../util/schemas";
-import { IOutputPlugin, IOutputPluginDest } from "../types/output_plugin";
-import { FastifyInstance, FastifyRequest } from "fastify";
-import { HLSPullPush, IOutputPluginType } from "./index";
+import { Schemas } from '../util/schemas';
+import { IOutputPluginDest } from '../types/output_plugin';
+import { FastifyInstance, FastifyRequest } from 'fastify';
+import { HLSPullPush, IOutputPluginType } from './index';
 
 export default function (fastify: FastifyInstance, opts, done) {
   const instance: HLSPullPush = opts.instance;
   const logger = instance.getLogger();
 
   fastify.post(
-    "/fetcher",
-    { schema: Schemas("POST/fetcher", instance.getRegisteredPlugins()) },
+    '/fetcher',
+    { schema: Schemas('POST/fetcher', instance.getRegisteredPlugins()) },
     async (request: FastifyRequest, reply) => {
       try {
         //console.log(`[${this.instanceId}]: I got a POST request`);
@@ -22,20 +22,27 @@ export default function (fastify: FastifyInstance, opts, done) {
           !requestBody.output ||
           !requestBody.payload
         ) {
-          return reply.code(404).send("Missing request body keys");
+          return reply.code(404).send('Missing request body keys');
         }
         // Check if string is valid url
         const url = new URL(requestBody.url);
         // Get Plugin from register if valid
-        const requestedPlugin: IOutputPluginType = instance.getPluginFor(requestBody.output);
+        const requestedPlugin: IOutputPluginType = instance.getPluginFor(
+          requestBody.output
+        );
         if (!requestedPlugin) {
-          return reply.code(404).send({ message: `Unsupported Plugin Type '${requestBody.output}'` });
+          return reply.code(404).send({
+            message: `Unsupported Plugin Type '${requestBody.output}'`
+          });
         }
 
         // Generate instance of plugin destination if valid
         let outputDest: IOutputPluginDest;
         try {
-          outputDest = requestedPlugin.createOutputDestination(requestBody.payload, instance.getLogger());
+          outputDest = requestedPlugin.createOutputDestination(
+            requestBody.payload,
+            instance.getLogger()
+          );
         } catch (err) {
           logger.error(err);
           return reply.code(404).send(JSON.stringify(err));
@@ -46,15 +53,19 @@ export default function (fastify: FastifyInstance, opts, done) {
           url: url.href,
           destPlugin: outputDest,
           destPluginName: requestBody.output,
-          concurrency: requestBody["concurrency"] ? requestBody["concurrency"] : null,
-          windowSize: requestBody["windowSize"] ? requestBody["windowSize"] : null,
+          concurrency: requestBody['concurrency']
+            ? requestBody['concurrency']
+            : null,
+          windowSize: requestBody['windowSize']
+            ? requestBody['windowSize']
+            : null
         });
         outputDest.attachSessionId(sessionId);
 
         reply.code(200).send({
-          message: "Created a Fetcher and started pulling from HLS Live Stream",
+          message: 'Created a Fetcher and started pulling from HLS Live Stream',
           fetcherId: sessionId,
-          requestData: request.body,
+          requestData: request.body
         });
       } catch (err) {
         logger.error(err);
@@ -62,32 +73,43 @@ export default function (fastify: FastifyInstance, opts, done) {
       }
     }
   );
-  fastify.get("/fetcher", { schema: Schemas("GET/fetcher", instance.getRegisteredPlugins()) }, async (request, reply) => {
-    logger.verbose(`${request.ip}: GET /fetcher`);
-    try {
-      let activeFetchersList = instance.getActiveFetchers();
-      reply.code(200).send(activeFetchersList);
-    } catch (err) {
-      logger.error(err);
-      reply.code(500).send(err.message);
+  fastify.get(
+    '/fetcher',
+    { schema: Schemas('GET/fetcher', instance.getRegisteredPlugins()) },
+    async (request, reply) => {
+      logger.verbose(`${request.ip}: GET /fetcher`);
+      try {
+        const activeFetchersList = instance.getActiveFetchers();
+        reply.code(200).send(activeFetchersList);
+      } catch (err) {
+        logger.error(err);
+        reply.code(500).send(err.message);
+      }
     }
-  });
+  );
   fastify.delete(
-    "/fetcher/:fetcherId",
-    { schema: Schemas("DELETE/fetcher/:fetcherId", instance.getRegisteredPlugins()) },
+    '/fetcher/:fetcherId',
+    {
+      schema: Schemas(
+        'DELETE/fetcher/:fetcherId',
+        instance.getRegisteredPlugins()
+      )
+    },
     async (request, reply) => {
       const requestParams: any = request.params;
       const fetcherId = requestParams.fetcherId;
       logger.verbose(`${request.ip}: DELETE /fetcher/${fetcherId}`);
       try {
         if (!instance.isValidFetcher(fetcherId)) {
-          logger.verbose("Nothing found under specified fetcher id: " + fetcherId);
+          logger.verbose(
+            'Nothing found under specified fetcher id: ' + fetcherId
+          );
           return reply.code(404).send({
-            message: `Fetcher with ID: '${fetcherId}' was not found`,
+            message: `Fetcher with ID: '${fetcherId}' was not found`
           });
         }
         await instance.stopFetcher(fetcherId);
-        return reply.code(204).send({ message: "Deleted Fetcher Session" });
+        return reply.code(204).send({ message: 'Deleted Fetcher Session' });
       } catch (err) {
         logger.error(err);
         reply.code(500).send(err.message);
@@ -96,4 +118,4 @@ export default function (fastify: FastifyInstance, opts, done) {
   );
 
   done();
-};
+}

@@ -1,4 +1,4 @@
-import { ILogger } from "./index";
+import { ILogger } from './index';
 
 export interface IOutputPlugin<TOutputPluginOpts> {
   createOutputDestination(opts: TOutputPluginOpts, logger: ILogger);

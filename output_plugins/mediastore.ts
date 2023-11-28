@@ -1,9 +1,19 @@
 import { ILogger } from '../types';
-import { ILocalFileUpload, IOutputPlugin, IOutputPluginDest, IRemoteFileDeletion, IRemoteFileUpload } from '../types/output_plugin';
-import { DeleteObjectCommand, MediaStoreDataClient, PutObjectCommand } from '@aws-sdk/client-mediastore-data';
-import fetch from "node-fetch";
+import {
+  ILocalFileUpload,
+  IOutputPlugin,
+  IOutputPluginDest,
+  IRemoteFileDeletion,
+  IRemoteFileUpload
+} from '../types/output_plugin';
+import {
+  DeleteObjectCommand,
+  MediaStoreDataClient,
+  PutObjectCommand
+} from '@aws-sdk/client-mediastore-data';
+import fetch from 'node-fetch';
 
-const { AbortController } = require("abort-controller");
+import { AbortController } from 'abort-controller';
 
 const DEFAULT_FAIL_TIMEOUT = 5 * 1000;
 const MAX_RETRIES = 3;
@@ -21,36 +31,41 @@ export interface ILocalFileUploadMediaStore extends ILocalFileUpload {
   contentType: string;
 }
 
-export class MediaStoreOutput implements IOutputPlugin<IMediaStoreOutputOptions> {
-  createOutputDestination(opts: IMediaStoreOutputOptions, logger: ILogger): IOutputPluginDest {
+export class MediaStoreOutput
+  implements IOutputPlugin<IMediaStoreOutputOptions>
+{
+  createOutputDestination(
+    opts: IMediaStoreOutputOptions,
+    logger: ILogger
+  ): IOutputPluginDest {
     return new MediaStoreOutputDestination(opts, logger);
   }
 
   getPayloadSchema() {
     const payloadSchema = {
-      type: "object",
-      description: "Neccessary configuration data for MediaStore output",
+      type: 'object',
+      description: 'Neccessary configuration data for MediaStore output',
       properties: {
         container: {
-          description: "Name of MediaStore container",
-          type: "string",
+          description: 'Name of MediaStore container',
+          type: 'string'
         },
         folder: {
-          description: "Name of Folder to Store files in, inside container",
-          type: "string",
+          description: 'Name of Folder to Store files in, inside container',
+          type: 'string'
         },
         endpoint: {
-          description: "Data endpoint for uploading",
-          type: "string",
+          description: 'Data endpoint for uploading',
+          type: 'string'
         }
       },
       example: {
-        container: "MEDIA_STORE_CONTAINER_NAME",
-        endpoint: "MEDIA_STORE_DATA_ENDPOINT"
+        container: 'MEDIA_STORE_CONTAINER_NAME',
+        endpoint: 'MEDIA_STORE_DATA_ENDPOINT'
       },
-      required: ["container", "endpoint"],
+      required: ['container', 'endpoint']
     };
-    return payloadSchema;    
+    return payloadSchema;
   }
 }
 
@@ -64,7 +79,9 @@ export class MediaStoreOutputDestination implements IOutputPluginDest {
   constructor(opts: IMediaStoreOutputOptions, logger: ILogger) {
     this.logger = logger;
     this.folderName = opts.folder || '';
-    this.mediaStoreClient = new MediaStoreDataClient({ endpoint: opts.dataEndpoint });
+    this.mediaStoreClient = new MediaStoreDataClient({
+      endpoint: opts.dataEndpoint
+    });
     this.failTimeoutMs = opts.timeoutMs ? opts.timeoutMs : DEFAULT_FAIL_TIMEOUT;
   }
 
@@ -77,17 +94,19 @@ export class MediaStoreOutputDestination implements IOutputPluginDest {
       fileData: opts.fileData,
       fileName: opts.fileName,
       folderName: this.folderName,
-      contentType: "application/vnd.apple.mpegurl",
-    };    
+      contentType: 'application/vnd.apple.mpegurl'
+    };
     try {
-      let result = await this._fileUploader(fileUploaderInput);
+      const result = await this._fileUploader(fileUploaderInput);
       if (!result) {
-        this.logger.error(`(${this.sessionId}) [!]: Manifest (${opts.fileName}) Failed to upload!`);
+        this.logger.error(
+          `(${this.sessionId}) [!]: Manifest (${opts.fileName}) Failed to upload!`
+        );
       }
-      return result;      
+      return result;
     } catch (err) {
       this.logger.error(err);
-      throw new Error("uploadMediaPlaylist Failed:" + err);
+      throw new Error('uploadMediaPlaylist Failed:' + err);
     }
   }
 
@@ -96,15 +115,21 @@ export class MediaStoreOutputDestination implements IOutputPluginDest {
       if (opts.uri) {
         const segURI = opts.uri;
         const fileName = opts.fileName;
-        this.logger.verbose(`(${this.sessionId}) Going to Fetch->${segURI}, and Upload as->${fileName}`);
-        const result = await this._fetchAndUpload(segURI, fileName, this.failTimeoutMs);
+        this.logger.verbose(
+          `(${this.sessionId}) Going to Fetch->${segURI}, and Upload as->${fileName}`
+        );
+        const result = await this._fetchAndUpload(
+          segURI,
+          fileName,
+          this.failTimeoutMs
+        );
         return result;
       } else {
-        throw new Error("plugin only supports fetching remote files");
+        throw new Error('plugin only supports fetching remote files');
       }
     } catch (err) {
       this.logger.error(err);
-      throw new Error("uploadMediaSegment Failed:" + err);
+      throw new Error('uploadMediaSegment Failed:' + err);
     }
   }
 
@@ -113,7 +138,9 @@ export class MediaStoreOutputDestination implements IOutputPluginDest {
       if (opts.fileName) {
         const result = await this._deleteFile(opts.fileName);
         this.logger.verbose(
-          `(${this.sessionId}) File Deletion '${opts.fileName}' ${result ? "successful" : "failed"}`
+          `(${this.sessionId}) File Deletion '${opts.fileName}' ${
+            result ? 'successful' : 'failed'
+          }`
         );
         return result;
       } else {
@@ -121,11 +148,13 @@ export class MediaStoreOutputDestination implements IOutputPluginDest {
       }
     } catch (err) {
       this.logger.error(err);
-      throw new Error("deleteMediaSegment Failed:" + err);
+      throw new Error('deleteMediaSegment Failed:' + err);
     }
-  }  
+  }
 
-  private async _fileUploader(opts: ILocalFileUploadMediaStore): Promise<boolean> {
+  private async _fileUploader(
+    opts: ILocalFileUploadMediaStore
+  ): Promise<boolean> {
     let result: boolean;
     try {
       const command = new PutObjectCommand({
@@ -135,11 +164,14 @@ export class MediaStoreOutputDestination implements IOutputPluginDest {
         StorageClass: 'TEMPORAL'
       });
       const response = await this.mediaStoreClient.send(command);
-      this.logger.verbose(`[${this.sessionId}]: Uploaded file: ${opts.folderName}/${opts.fileName}`);
+      this.logger.verbose(
+        `[${this.sessionId}]: Uploaded file: ${opts.folderName}/${opts.fileName}`
+      );
       result = true;
     } catch (err) {
       this.logger.error(
-        `[${this.sessionId}]: [!] Problem occured when uploading file: '${opts.folderName}/${opts.fileName}' to destination: ` + err.$response.reason
+        `[${this.sessionId}]: [!] Problem occured when uploading file: '${opts.folderName}/${opts.fileName}' to destination: ` +
+          err.$response.reason
       );
       result = false;
     }
@@ -147,7 +179,11 @@ export class MediaStoreOutputDestination implements IOutputPluginDest {
     return result;
   }
 
-  private async _fetchAndUpload(segURI: string, fileName: string, failTimeoutMs: number): Promise<boolean> {
+  private async _fetchAndUpload(
+    segURI: string,
+    fileName: string,
+    failTimeoutMs: number
+  ): Promise<boolean> {
     let retryCount = 0;
     while (retryCount < MAX_RETRIES) {
       retryCount++;
@@ -162,36 +198,38 @@ export class MediaStoreOutputDestination implements IOutputPluginDest {
           // Determine content type based on file extension
           let contentType: string;
           if (fileName.match(/.ts$/)) {
-            contentType = "video/MP2T";
+            contentType = 'video/MP2T';
           } else if (fileName.match(/.m4s$/)) {
-            contentType = "video/iso.segment";
+            contentType = 'video/iso.segment';
           } else if (fileName.match(/.mp4$/)) {
-            contentType = "video/mp4";
+            contentType = 'video/mp4';
           } else if (fileName.match(/.vtt$/)) {
             // Assume Subtitle file
-            contentType = "text/vtt";
+            contentType = 'text/vtt';
           } else {
-            contentType = "application/octet-stream";
+            contentType = 'application/octet-stream';
           }
           const fileUploaderInput: ILocalFileUploadMediaStore = {
             fileData: buffer,
             fileName: fileName,
             folderName: this.folderName,
-            contentType: contentType,
+            contentType: contentType
           };
           clearTimeout(timeout);
           const result = await this._fileUploader(fileUploaderInput);
           return result;
         } else {
           this.logger.error(
-            `(${this.sessionId}) Segment Unreachable! at ${segURI}. Returned code: ${
+            `(${
+              this.sessionId
+            }) Segment Unreachable! at ${segURI}. Returned code: ${
               response.status
             }. Retries left: [${MAX_RETRIES - retryCount + 1}]`
           );
           await timer(RETRY_DELAY);
         }
       } catch (err) {
-        if (err.type === "aborted") {
+        if (err.type === 'aborted') {
           this.logger.error(
             `(${this.sessionId}) Request Timeout for fetching (${failTimeoutMs}ms) ${segURI} (${retryCount})`
           );
@@ -203,12 +241,14 @@ export class MediaStoreOutputDestination implements IOutputPluginDest {
         clearTimeout(timeout);
       }
     }
-    this.logger.error(`(${this.sessionId}) Segment: '${fileName}' Upload Failed!`);
+    this.logger.error(
+      `(${this.sessionId}) Segment: '${fileName}' Upload Failed!`
+    );
     return false;
   }
 
   private async _deleteFile(fileName: string): Promise<boolean> {
-    let result: boolean = false;
+    let result = false;
     try {
       const command = new DeleteObjectCommand({
         Path: `${this.folderName}/${fileName}`
@@ -218,11 +258,12 @@ export class MediaStoreOutputDestination implements IOutputPluginDest {
       result = true;
     } catch (err) {
       this.logger.error(
-        `[${this.sessionId}]: [!] Problem occured when deleting file: '${fileName}': ` + err.$response.reason
+        `[${this.sessionId}]: [!] Problem occured when deleting file: '${fileName}': ` +
+          err.$response.reason
       );
       result = false;
     }
 
     return result;
-  }  
+  }
 }
