@@ -1,1 +1,1 @@
-export { HLSPullPush, MediaPackageOutput, S3BucketOutput, VoidOutput } from "./src/index";
+export { HLSPullPush, MediaPackageOutput, MediaStoreOutput, S3BucketOutput, VoidOutput } from "./src/index";

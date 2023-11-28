@@ -4,10 +4,15 @@ import { IOutputPlugin, IOutputPluginDest } from "../types/output_plugin";
 import { ILogger } from "../types/index";
 import { AbstractLogger } from "./logger";
 export { MediaPackageOutput } from "../output_plugins/mediapackage";
+export {  MediaStoreOutput } from "../output_plugins/mediastore";
 export { S3BucketOutput } from "../output_plugins/s3bucket";
 export { VoidOutput } from "../output_plugins/void";
 
 import api from "./api";
+import { IMediaStoreOutputOptions } from "../output_plugins/mediastore";
+import { IMediaPackageOutputOptions } from "../output_plugins/mediapackage";
+import { IS3BucketOutputOptions } from "../output_plugins/s3bucket";
+import { IVoidOutputOptions } from "../output_plugins/void";
 
 export interface IDestPayload {
   destination: string;
@@ -15,9 +20,11 @@ export interface IDestPayload {
   password: string;
 }
 
+export type IOutputPluginType = IOutputPlugin<IMediaStoreOutputOptions | IMediaPackageOutputOptions | IS3BucketOutputOptions | IVoidOutputOptions>;
+
 export class HLSPullPush {
   private server: FastifyInstance;
-  private PLUGINS: { [name: string]: IOutputPlugin };
+  private PLUGINS: { [name: string]: IOutputPluginType };
   private SESSIONS: { [sessionId: string]: Session };
   private logger: ILogger;
 
@@ -103,14 +110,14 @@ export class HLSPullPush {
     return Object.keys(this.SESSIONS).map((sessionId) => this.SESSIONS[sessionId].toJSON());
   }
 
-  registerPlugin(name: string, plugin: IOutputPlugin): void {
+  registerPlugin(name: string, plugin: IOutputPluginType): void {
     if (!this.PLUGINS[name]) {
       this.PLUGINS[name] = plugin;
     }
     this.logger.info(`Registered output plugin '${name}'`);
   }
 
-  getPluginFor(name: string): IOutputPlugin {
+  getPluginFor(name: string): IOutputPluginType {
     try {
       const result = this.PLUGINS[name];
       if (!result) {
@@ -125,7 +132,7 @@ export class HLSPullPush {
     }
   }
 
-  getRegisteredPlugins(): IOutputPlugin[] {
+  getRegisteredPlugins(): IOutputPluginType[] {
     return Object.keys(this.PLUGINS).map((name) => this.PLUGINS[name]);
   }
 

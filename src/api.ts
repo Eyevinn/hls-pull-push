@@ -1,7 +1,7 @@
 import { Schemas } from "../util/schemas";
 import { IOutputPlugin, IOutputPluginDest } from "../types/output_plugin";
 import { FastifyInstance, FastifyRequest } from "fastify";
-import { HLSPullPush } from "./index";
+import { HLSPullPush, IOutputPluginType } from "./index";
 
 export default function (fastify: FastifyInstance, opts, done) {
   const instance: HLSPullPush = opts.instance;
@@ -27,7 +27,7 @@ export default function (fastify: FastifyInstance, opts, done) {
         // Check if string is valid url
         const url = new URL(requestBody.url);
         // Get Plugin from register if valid
-        const requestedPlugin: IOutputPlugin = instance.getPluginFor(requestBody.output);
+        const requestedPlugin: IOutputPluginType = instance.getPluginFor(requestBody.output);
         if (!requestedPlugin) {
           return reply.code(404).send({ message: `Unsupported Plugin Type '${requestBody.output}'` });
         }

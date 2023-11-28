@@ -1,91 +1,71 @@
-import {
-  ILocalFileUpload,
-  IOutputPlugin,
-  IOutputPluginDest,
-  IRemoteFileDeletion,
-  IRemoteFileUpload,
-} from "../types/output_plugin";
-import { ILogger } from "../types/index";
+import { ILogger } from '../types';
+import { ILocalFileUpload, IOutputPlugin, IOutputPluginDest, IRemoteFileDeletion, IRemoteFileUpload } from '../types/output_plugin';
+import { DeleteObjectCommand, MediaStoreDataClient, PutObjectCommand } from '@aws-sdk/client-mediastore-data';
 import fetch from "node-fetch";
-import { AwsUploadModule } from "@eyevinn/iaf-plugin-aws-s3";
-import { S3Client, S3 } from "@aws-sdk/client-s3";
 
 const { AbortController } = require("abort-controller");
-require("dotenv").config();
 
 const DEFAULT_FAIL_TIMEOUT = 5 * 1000;
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 1 * 1000;
 const timer = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-export interface IS3BucketOutputOptions {
-  bucket: string;
-  folder: string;
+export interface IMediaStoreOutputOptions {
+  dataEndpoint: string;
+  folder?: string;
   timeoutMs?: number;
 }
 
-export interface ILocalFileUploadS3 extends ILocalFileUpload {
+export interface ILocalFileUploadMediaStore extends ILocalFileUpload {
+  folderName?: string;
   contentType: string;
-  folderName: string;
 }
 
-export class S3BucketOutput implements IOutputPlugin<IS3BucketOutputOptions> {
-  createOutputDestination(opts: IS3BucketOutputOptions, logger: ILogger): IOutputPluginDest {
-    // verify opts
-    if (!opts.bucket || !opts.folder) {
-      throw new Error("Payload Missing 'bucket' or 'folder' parameter");
-    }
-    return new S3BucketOutputDestination(opts, logger);
+export class MediaStoreOutput implements IOutputPlugin<IMediaStoreOutputOptions> {
+  createOutputDestination(opts: IMediaStoreOutputOptions, logger: ILogger): IOutputPluginDest {
+    return new MediaStoreOutputDestination(opts, logger);
   }
 
   getPayloadSchema() {
     const payloadSchema = {
       type: "object",
-      description: "Neccessary configuration data for S3 output",
+      description: "Neccessary configuration data for MediaStore output",
       properties: {
-        bucket: {
-          description: "Name of Output S3 Bucket",
+        container: {
+          description: "Name of MediaStore container",
           type: "string",
         },
         folder: {
-          description: "Name of Folder to Store files in, inside S3 Bucket",
+          description: "Name of Folder to Store files in, inside container",
           type: "string",
         },
-        timeoutMs: {
-          description: "Timeout for fetching source segments",
-          type: "number",
-        },
+        endpoint: {
+          description: "Data endpoint for uploading",
+          type: "string",
+        }
       },
       example: {
-        bucket: "S3_BUCKET_NAME",
-        folder: "S3_FOLDER_BUCKET_NAME",
-        timeoutMs: 5000,
+        container: "MEDIA_STORE_CONTAINER_NAME",
+        endpoint: "MEDIA_STORE_DATA_ENDPOINT"
       },
-      required: ["bucket", "folder"],
+      required: ["container", "endpoint"],
     };
-    return payloadSchema;
+    return payloadSchema;    
   }
 }
 
-export class S3BucketOutputDestination implements IOutputPluginDest {
-  private bucketName: string;
+export class MediaStoreOutputDestination implements IOutputPluginDest {
+  private logger: ILogger;
+  private mediaStoreClient: MediaStoreDataClient;
   private folderName: string;
   private failTimeoutMs: number;
-  private logger: ILogger;
-  private awsUploadModule: AwsUploadModule;
-  private s3Client: any;
   private sessionId?: string;
 
-  constructor(opts: IS3BucketOutputOptions, logger: ILogger) {
-    this.bucketName = opts.bucket;
-    this.folderName = opts.folder;
-    this.failTimeoutMs = opts.timeoutMs ? opts.timeoutMs : DEFAULT_FAIL_TIMEOUT;
+  constructor(opts: IMediaStoreOutputOptions, logger: ILogger) {
     this.logger = logger;
-    this.awsUploadModule = new AwsUploadModule(opts.bucket, this.logger);
-    this.s3Client = new S3({}) || new S3Client({});
-    this.awsUploadModule.fileUploadedDelegate = (outputs) => {
-      logger.info(`[${this.sessionId}]: Uploaded (${outputs["file"]}) to S3 Bucket (${this.bucketName})`);
-    };
+    this.folderName = opts.folder || '';
+    this.mediaStoreClient = new MediaStoreDataClient({ endpoint: opts.dataEndpoint });
+    this.failTimeoutMs = opts.timeoutMs ? opts.timeoutMs : DEFAULT_FAIL_TIMEOUT;
   }
 
   attachSessionId(id: string) {
@@ -93,18 +73,18 @@ export class S3BucketOutputDestination implements IOutputPluginDest {
   }
 
   async uploadMediaPlaylist(opts: ILocalFileUpload): Promise<boolean> {
-    const fileUploaderInput: ILocalFileUploadS3 = {
+    const fileUploaderInput: ILocalFileUploadMediaStore = {
       fileData: opts.fileData,
       fileName: opts.fileName,
       folderName: this.folderName,
       contentType: "application/vnd.apple.mpegurl",
-    };
+    };    
     try {
       let result = await this._fileUploader(fileUploaderInput);
       if (!result) {
         this.logger.error(`(${this.sessionId}) [!]: Manifest (${opts.fileName}) Failed to upload!`);
       }
-      return result;
+      return result;      
     } catch (err) {
       this.logger.error(err);
       throw new Error("uploadMediaPlaylist Failed:" + err);
@@ -143,50 +123,28 @@ export class S3BucketOutputDestination implements IOutputPluginDest {
       this.logger.error(err);
       throw new Error("deleteMediaSegment Failed:" + err);
     }
-  }
-  // .-----------------.
-  // | PRIVATE METHODS |
-  // '-----------------'
-  private async _fileUploader(opts: ILocalFileUploadS3): Promise<boolean> {
+  }  
+
+  private async _fileUploader(opts: ILocalFileUploadMediaStore): Promise<boolean> {
     let result: boolean;
     try {
-      await this.awsUploadModule.uploader
-        .upload(opts.fileData, opts.fileName, opts.folderName, opts.contentType)
-        .then((res) => {
-          this.awsUploadModule.fileUploadedDelegate(res);
-          result = true;
-        });
+      const command = new PutObjectCommand({
+        Body: opts.fileData,
+        Path: `${opts.folderName}/${opts.fileName}`,
+        ContentType: opts.contentType,
+        StorageClass: 'TEMPORAL'
+      });
+      const response = await this.mediaStoreClient.send(command);
+      this.logger.verbose(`[${this.sessionId}]: Uploaded file: ${opts.folderName}/${opts.fileName}`);
+      result = true;
     } catch (err) {
       this.logger.error(
-        `[${this.sessionId}]: [!] Problem occured when uploading file: '${opts.fileName}' to destination. Full Error: "${err}"`
+        `[${this.sessionId}]: [!] Problem occured when uploading file: '${opts.folderName}/${opts.fileName}' to destination: ` + err.$response.reason
       );
       result = false;
     }
 
     return result;
-  }
-
-  private async _deleteFile(fileName: string): Promise<boolean> {
-    let result: boolean = false;
-    const params = {
-      Bucket: this.bucketName,
-      Key: `${this.folderName}/${fileName}`,
-    };
-    return new Promise((resolve, rejects) => {
-      this.s3Client.deleteObject(params, function (err: any, data: any) {
-        if (err) {
-          console.log(err, err.stack);
-          rejects(result);
-        }
-
-        if (data && data["$metadata"]) {
-          if (data["$metadata"].httpStatusCode && data["$metadata"].httpStatusCode === 204) {
-            result = true;
-          }
-        }
-        resolve(result);
-      });
-    });
   }
 
   private async _fetchAndUpload(segURI: string, fileName: string, failTimeoutMs: number): Promise<boolean> {
@@ -215,7 +173,7 @@ export class S3BucketOutputDestination implements IOutputPluginDest {
           } else {
             contentType = "application/octet-stream";
           }
-          const fileUploaderInput: ILocalFileUploadS3 = {
+          const fileUploaderInput: ILocalFileUploadMediaStore = {
             fileData: buffer,
             fileName: fileName,
             folderName: this.folderName,
@@ -248,4 +206,23 @@ export class S3BucketOutputDestination implements IOutputPluginDest {
     this.logger.error(`(${this.sessionId}) Segment: '${fileName}' Upload Failed!`);
     return false;
   }
+
+  private async _deleteFile(fileName: string): Promise<boolean> {
+    let result: boolean = false;
+    try {
+      const command = new DeleteObjectCommand({
+        Path: `${this.folderName}/${fileName}`
+      });
+      const response = await this.mediaStoreClient.send(command);
+      this.logger.verbose(`[${this.sessionId}]: Deleted file: ${fileName}`);
+      result = true;
+    } catch (err) {
+      this.logger.error(
+        `[${this.sessionId}]: [!] Problem occured when deleting file: '${fileName}': ` + err.$response.reason
+      );
+      result = false;
+    }
+
+    return result;
+  }  
 }

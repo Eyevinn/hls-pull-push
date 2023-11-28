@@ -9,8 +9,12 @@ import { ILogger } from "../types/index";
 
 require("dotenv").config();
 
-export class VoidOutput implements IOutputPlugin {
-  createOutputDestination(opts: any, logger: ILogger): IOutputPluginDest {
+export interface IVoidOutputOptions {
+  void?: string; 
+}
+
+export class VoidOutput implements IOutputPlugin<IVoidOutputOptions> {
+  createOutputDestination(opts: IVoidOutputOptions, logger: ILogger): IOutputPluginDest {
     return new VoidOutputDestination(opts, logger);
   }
 
