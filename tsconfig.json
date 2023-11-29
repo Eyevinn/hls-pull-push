@@ -3,11 +3,13 @@
     "module": "commonjs",
     "esModuleInterop": true,
     "target": "es6",
+    "declaration": true,
+    "declarationMap": true,
     "moduleResolution": "node",
     "sourceMap": true,
     "resolveJsonModule": true,
     "outDir": "./dist"
   },
-  "include": ["src", "./"],
-  "exclude": ["node_modules", "examples"]
+  "include": ["./src/**/*", "./"],
+  "exclude": ["node_modules", "examples", "./dist"]
 }
