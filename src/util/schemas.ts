@@ -1,4 +1,4 @@
-import { IOutputPluginType } from '../src';
+import { IOutputPluginType } from '..';
 
 const BadRequestSchema = (exampleMsg) => ({
   description: 'Bad request error description',

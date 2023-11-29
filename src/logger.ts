@@ -1,4 +1,9 @@
-import { ILogger } from '../types/index';
+export interface ILogger {
+  verbose: (message: string) => void;
+  info: (message: string) => void;
+  warn: (message: string) => void;
+  error: (message: string) => void;
+}
 
 export class AbstractLogger implements ILogger {
   private doLog(level: string, message: string) {

@@ -1,11 +1,10 @@
-import { ILogger } from '../types';
 import {
   ILocalFileUpload,
   IOutputPlugin,
   IOutputPluginDest,
   IRemoteFileDeletion,
   IRemoteFileUpload
-} from '../types/output_plugin';
+} from './interface';
 import {
   DeleteObjectCommand,
   MediaStoreDataClient,
@@ -14,6 +13,7 @@ import {
 import fetch from 'node-fetch';
 
 import { AbortController } from 'abort-controller';
+import { ILogger } from '../logger';
 
 const DEFAULT_FAIL_TIMEOUT = 5 * 1000;
 const MAX_RETRIES = 3;

@@ -1,21 +1,20 @@
 import fastify, { FastifyInstance } from 'fastify';
-import { Session } from '../util/session';
-import { IOutputPlugin, IOutputPluginDest } from '../types/output_plugin';
-import { ILogger } from '../types/index';
-import { AbstractLogger } from './logger';
-export { MediaPackageOutput } from '../output_plugins/mediapackage';
-export { MediaStoreOutput } from '../output_plugins/mediastore';
-export { S3BucketOutput } from '../output_plugins/s3bucket';
-export { VoidOutput } from '../output_plugins/void';
+import { Session } from './util/session';
+import { AbstractLogger, ILogger } from './logger';
+export { MediaPackageOutput } from './output_plugins/mediapackage';
+export { MediaStoreOutput } from './output_plugins/mediastore';
+export { S3BucketOutput } from './output_plugins/s3bucket';
+export { VoidOutput } from './output_plugins/void';
 
 import api from './api';
-import { IMediaStoreOutputOptions } from '../output_plugins/mediastore';
-import { IMediaPackageOutputOptions } from '../output_plugins/mediapackage';
-import { IS3BucketOutputOptions } from '../output_plugins/s3bucket';
-import { IVoidOutputOptions } from '../output_plugins/void';
+import { IMediaStoreOutputOptions } from './output_plugins/mediastore';
+import { IMediaPackageOutputOptions } from './output_plugins/mediapackage';
+import { IS3BucketOutputOptions } from './output_plugins/s3bucket';
+import { IVoidOutputOptions } from './output_plugins/void';
 
 import fastifySwagger from 'fastify-swagger';
 import fastifyCors from 'fastify-cors';
+import { IOutputPlugin, IOutputPluginDest } from './output_plugins/interface';
 
 export interface IDestPayload {
   destination: string;

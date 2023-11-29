@@ -4,8 +4,8 @@ import {
   IOutputPluginDest,
   IRemoteFileDeletion,
   IRemoteFileUpload
-} from '../types/output_plugin';
-import { ILogger } from '../types/index';
+} from './interface';
+import { ILogger } from '../logger';
 
 export interface IVoidOutputOptions {
   void?: string;

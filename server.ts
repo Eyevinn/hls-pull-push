@@ -4,8 +4,8 @@ import {
   S3BucketOutput,
   VoidOutput
 } from './index';
-import { ILogger } from './types/index';
 import { createLogger, transports, format, Logger } from 'winston';
+import { ILogger } from './src/logger';
 const { combine, timestamp, printf } = format;
 
 class MyLogger implements ILogger {

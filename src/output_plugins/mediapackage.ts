@@ -3,11 +3,11 @@ import {
   IOutputPlugin,
   IOutputPluginDest,
   IRemoteFileUpload
-} from '../types/output_plugin';
-import { ILogger } from '../types/index';
+} from './interface';
 import { AuthType, createClient, WebDAVClient } from 'webdav';
 import fetch from 'node-fetch';
 import { AbortController } from 'abort-controller';
+import { ILogger } from '../logger';
 
 const DEFAULT_FAIL_TIMEOUT = 5 * 1000;
 const MAX_RETRIES = 3;
