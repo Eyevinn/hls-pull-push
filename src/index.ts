@@ -1,6 +1,7 @@
 import fastify, { FastifyInstance } from 'fastify';
 import { Session } from './util/session';
 import { AbstractLogger, ILogger } from './logger';
+export { ILogger } from './logger';
 export { MediaPackageOutput } from './output_plugins/mediapackage';
 export { MediaStoreOutput } from './output_plugins/mediastore';
 export { S3BucketOutput } from './output_plugins/s3bucket';
