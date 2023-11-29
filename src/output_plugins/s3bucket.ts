@@ -4,13 +4,13 @@ import {
   IOutputPluginDest,
   IRemoteFileDeletion,
   IRemoteFileUpload
-} from '../types/output_plugin';
-import { ILogger } from '../types/index';
+} from './interface';
 import fetch from 'node-fetch';
 import { AwsUploadModule } from '@eyevinn/iaf-plugin-aws-s3';
 import { S3Client, S3 } from '@aws-sdk/client-s3';
 
 import { AbortController } from 'abort-controller';
+import { ILogger } from '../logger';
 
 const DEFAULT_FAIL_TIMEOUT = 5 * 1000;
 const MAX_RETRIES = 3;

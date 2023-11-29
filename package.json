@@ -14,7 +14,8 @@
     "dev": "node dist/server.js",
     "demo": "NODE_ENV=demo node dist/server.js",
     "lint": "eslint .",
-    "pretty": "prettier --check --ignore-unknown ."
+    "pretty": "prettier --check --ignore-unknown .",
+    "typecheck": "tsc --noEmit -p ./"
   },
   "author": "Eyevinn Technology <work@eyevinn.se>",
   "license": "MIT",

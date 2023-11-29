@@ -8,17 +8,14 @@ import {
 } from '@eyevinn/hls-recorder';
 import { promise as fastq } from 'fastq';
 import type { queueAsPromised } from 'fastq';
-import {
-  GetOnlyNewestSegments,
-  ReplaceSegmentURLs
-} from '../util/handleSegments';
+import { GetOnlyNewestSegments, ReplaceSegmentURLs } from './handleSegments';
 import {
   GenerateAudioM3U8,
   GenerateMediaM3U8,
   GenerateSubtitleM3U8
 } from '@eyevinn/hls-recorder/dist/util/manifest_generator.js';
-import { IOutputPluginDest } from '../types/output_plugin';
 import Debug from 'debug';
+import { IOutputPluginDest } from '../output_plugins/interface';
 const debug = Debug('hls-pull-push');
 
 const HLSRECORDER_RESTART_ON_ERROR =

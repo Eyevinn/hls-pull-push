@@ -1,7 +1,7 @@
-import { Schemas } from '../util/schemas';
-import { IOutputPluginDest } from '../types/output_plugin';
+import { Schemas } from './util/schemas';
 import { FastifyInstance, FastifyRequest } from 'fastify';
 import { HLSPullPush, IOutputPluginType } from './index';
+import { IOutputPluginDest } from './output_plugins/interface';
 
 export default function (fastify: FastifyInstance, opts, done) {
   const instance: HLSPullPush = opts.instance;

@@ -3,5 +3,6 @@ export {
   MediaPackageOutput,
   MediaStoreOutput,
   S3BucketOutput,
-  VoidOutput
+  VoidOutput,
+  ILogger
 } from './src/index';
