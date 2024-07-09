@@ -21,6 +21,7 @@ export interface IS3BucketOutputOptions {
   bucket: string;
   folder: string;
   timeoutMs?: number;
+  outputIndexFilename?: string;
 }
 
 export interface ILocalFileUploadS3 extends ILocalFileUpload {
@@ -72,6 +73,7 @@ export class S3BucketOutput implements IOutputPlugin<IS3BucketOutputOptions> {
 export class S3BucketOutputDestination implements IOutputPluginDest {
   private bucketName: string;
   private folderName: string;
+  private outputIndexFilename?: string;
   private failTimeoutMs: number;
   private logger: ILogger;
   private awsUploadModule: AwsUploadModule;
@@ -81,6 +83,7 @@ export class S3BucketOutputDestination implements IOutputPluginDest {
   constructor(opts: IS3BucketOutputOptions, logger: ILogger) {
     this.bucketName = opts.bucket;
     this.folderName = opts.folder;
+    this.outputIndexFilename = opts.outputIndexFilename;
     this.failTimeoutMs = opts.timeoutMs ? opts.timeoutMs : DEFAULT_FAIL_TIMEOUT;
     this.logger = logger;
     this.awsUploadModule = new AwsUploadModule(opts.bucket, this.logger);
@@ -99,7 +102,10 @@ export class S3BucketOutputDestination implements IOutputPluginDest {
   async uploadMediaPlaylist(opts: ILocalFileUpload): Promise<boolean> {
     const fileUploaderInput: ILocalFileUploadS3 = {
       fileData: opts.fileData,
-      fileName: opts.fileName,
+      fileName:
+        this.outputIndexFilename && opts.fileName.match(/(master|channel|index)\.m3u8$/)
+          ? this.outputIndexFilename
+          : opts.fileName,
       folderName: this.folderName,
       contentType: 'application/vnd.apple.mpegurl'
     };
