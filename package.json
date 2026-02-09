@@ -53,7 +53,7 @@
     "fs": "^0.0.1-security",
     "node-fetch": "^2.6.6",
     "uuid": "^3.4.0",
-    "webdav": "^4.7.0",
+    "webdav": "^5.9.0",
     "winston": "^3.3.3"
   }
 }
